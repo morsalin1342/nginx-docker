@@ -16,6 +16,12 @@
 #   ModSecurity 3 + connector  the only maintained WAF engine for nginx. Ships
 #                              with the OWASP Core Rule Set, loaded by nothing.
 #   ngx_brotli                 nginx has gzip built in and no Brotli at all.
+#   zstd                       Zstandard, beside Brotli rather than instead of
+#                              it. They do not compete: a client advertises what
+#                              it accepts and nginx picks, so shipping both means
+#                              zstd for clients that support it (Chrome 123+,
+#                              Firefox 126+), Brotli for the rest, gzip for
+#                              everything else.
 #   headers-more               nginx cannot unset an arbitrary response header
 #                              without it — `more_clear_headers`.
 #   GeoIP2                     nginx's own ngx_http_geoip_module speaks the
@@ -85,15 +91,26 @@ ARG MODSECURITY_NGINX_VERSION=v1.0.4
 ARG HEADERS_MORE_VERSION=v0.40
 ARG GEOIP2_VERSION=3.4
 ARG VTS_VERSION=v0.2.7
+ARG ZSTD_MODULE_VERSION=0.1.1
 # ngx_brotli publishes no releases, so this is a commit. Pinned rather than
 # tracking master: an unpinned dependency in a WAF-bearing gateway is a change
 # nobody reviewed arriving in a tag we already published.
+#
+# **Both compression modules are worth knowing the state of**, since neither is
+# pristine and both were kept deliberately. ngx_brotli's last commit is October
+# 2023 and it has never cut a release; zstd-nginx-module last moved in June 2025
+# and its own README calls it "currently considered experimental". They are
+# carried because compression is the main reason anyone builds custom nginx and
+# gzip alone is a poor showing in 2026 — not because either is actively
+# developed. Both are pinned, both are off by default, and dropping either is a
+# two-line change.
 ARG NGX_BROTLI_COMMIT=a71f9312c2deb28875acc7bacfdd5695a111aa53
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential ca-certificates cmake curl git libtool pkg-config \
         libcurl4-openssl-dev libgeoip-dev liblmdb-dev libmaxminddb-dev \
-        libpcre2-dev libssl-dev libxml2-dev libxslt1-dev libyajl-dev zlib1g-dev \
+        libpcre2-dev libssl-dev libxml2-dev libxslt1-dev libyajl-dev libzstd-dev \
+        zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=modsecurity /usr/local/modsecurity /usr/local/modsecurity
@@ -109,6 +126,8 @@ RUN curl -fsSL "https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz" | tar 
         https://github.com/leev/ngx_http_geoip2_module.git \
     && git clone --branch "${VTS_VERSION}" --depth 1 \
         https://github.com/vozlt/nginx-module-vts.git \
+    && git clone --branch "${ZSTD_MODULE_VERSION}" --depth 1 \
+        https://github.com/tokers/zstd-nginx-module.git \
     && git clone --recursive https://github.com/google/ngx_brotli.git \
     && git -C ngx_brotli checkout "${NGX_BROTLI_COMMIT}" \
     && git -C ngx_brotli submodule update --init --recursive
@@ -133,6 +152,41 @@ RUN mkdir -p out && cd out \
              -DCMAKE_CXX_FLAGS="-Ofast -fPIC" \
              -DCMAKE_INSTALL_PREFIX=./installed .. \
     && cmake --build . --config Release --target brotlienc
+
+# libzstd, built with -fPIC so it can link into a shared object.
+#
+# The same treatment Brotli gets above, and for the same reason. The zstd module
+# prefers the static archive — its README explains why: "this Nginx module uses
+# some advanced APIs where static linking is recommended" — but Debian's
+# libzstd.a is not built with -fPIC, so linking it into a dynamic module fails:
+#
+#   relocation R_X86_64_PC32 ... can not be used when making a shared object
+#
+# The dynamic fallback is not an option either, because **it is broken
+# upstream**. zstd-nginx-module's filter/config builds its link flags as
+#
+#   ngx_zstd_opt_L="-L$ZSTD_LIB -lzstd -Wl,-rpath, $ZSTD_LIB"
+#
+# with a space after the trailing comma, which expands to a malformed
+# `-Wl,-rpath,` with an empty path plus a bare directory handed to the linker as
+# a file. The link test then fails and configure aborts with "requires the
+# ZStandard library" — which reads like a missing dependency and is not one.
+# That typo is presumably why every packager of this module links it statically.
+#
+# So: our own libzstd, PIC, and the static path it already prefers.
+ARG ZSTD_VERSION=1.5.6
+
+WORKDIR /usr/src
+RUN curl -fsSL "https://github.com/facebook/zstd/releases/download/v${ZSTD_VERSION}/zstd-${ZSTD_VERSION}.tar.gz" \
+        | tar -xz \
+    && make -C "zstd-${ZSTD_VERSION}/lib" -j"$(nproc)" libzstd.a CFLAGS="-O3 -fPIC" \
+    && mkdir -p /usr/local/zstd/lib /usr/local/zstd/include \
+    && cp "zstd-${ZSTD_VERSION}/lib/libzstd.a" /usr/local/zstd/lib/ \
+    && cp "zstd-${ZSTD_VERSION}"/lib/zstd.h "zstd-${ZSTD_VERSION}"/lib/zdict.h \
+          "zstd-${ZSTD_VERSION}"/lib/zstd_errors.h /usr/local/zstd/include/
+
+ENV ZSTD_INC=/usr/local/zstd/include
+ENV ZSTD_LIB=/usr/local/zstd/lib
 
 # `--with-compat` is mandatory and not optional tidiness: without it these
 # modules are rejected by the stock binary at load time with a version mismatch,
@@ -171,6 +225,7 @@ RUN ./configure \
         --add-dynamic-module=../headers-more-nginx-module \
         --add-dynamic-module=../ngx_http_geoip2_module \
         --add-dynamic-module=../nginx-module-vts \
+        --add-dynamic-module=../zstd-nginx-module \
         --add-dynamic-module=../ngx_brotli \
     && make -j"$(nproc)" modules
 
@@ -190,7 +245,7 @@ LABEL org.opencontainers.image.title="easydigital/nginx" \
 # Runtime libraries the modules link against. The -dev packages stay in the
 # builder; only the shared objects are needed here.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libcurl4 libgeoip1 liblmdb0 libmaxminddb0 libxml2 libyajl2 \
+        libcurl4 libgeoip1 liblmdb0 libmaxminddb0 libxml2 libyajl2 libzstd1 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=modsecurity /usr/local/modsecurity/lib/libmodsecurity.so* /usr/local/modsecurity/lib/
@@ -237,7 +292,9 @@ load_module modules/ngx_http_headers_more_filter_module.so;\n\
 load_module modules/ngx_http_geoip2_module.so;\n\
 load_module modules/ngx_http_vhost_traffic_status_module.so;\n\
 load_module modules/ngx_http_brotli_filter_module.so;\n\
-load_module modules/ngx_http_brotli_static_module.so;\n' \
+load_module modules/ngx_http_brotli_static_module.so;\n\
+load_module modules/ngx_http_zstd_filter_module.so;\n\
+load_module modules/ngx_http_zstd_static_module.so;\n' \
         > /etc/nginx/modules-enabled/10-modules.conf \
     && printf 'include /etc/nginx/modules-enabled/*.conf;\n' | \
         cat - /etc/nginx/nginx.conf > /tmp/nginx.conf \

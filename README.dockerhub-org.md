@@ -2,8 +2,8 @@
 
 **Maintained by [easydigital](https://hub.docker.com/u/easydigital)** · [GitHub](https://github.com/easydigital/nginx-docker)
 
-Official nginx plus **ModSecurity 3**, **Brotli**, **headers-more** and **GeoIP2**, built as
-dynamic modules. The image *is* the official `nginx` image — the modules are compiled
+Official nginx plus **ModSecurity 3**, **Brotli**, **Zstandard**, **headers-more**, **GeoIP2** and
+**VTS**, built as dynamic modules. The image *is* the official `nginx` image — the modules are compiled
 separately and loaded into the stock binary, so nginx's own security updates arrive on
 nginx's schedule, not this repository's.
 
@@ -35,6 +35,7 @@ replacement for `nginx:<version>` until you use one.
 |---|---|---|
 | ModSecurity 3 | `modsecurity on;` | nginx ships no WAF |
 | Brotli | `brotli on;` | nginx has gzip only |
+| Zstandard | `zstd on;` | nginx has gzip only; zstd is negotiated by Chrome 123+ and Firefox 126+ |
 | headers-more | `more_clear_headers Server;` | nginx cannot unset arbitrary headers |
 | GeoIP2 | `geoip2 /path/db.mmdb { … }` | nginx's own GeoIP module reads only the legacy databases MaxMind stopped publishing |
 

@@ -1,7 +1,7 @@
 # nginx-docker
 
 Official nginx plus the modules it does not ship — **ModSecurity 3**, **Brotli**,
-**headers-more** and **GeoIP2** — built as dynamic modules.
+**Zstandard**, **headers-more**, **GeoIP2** and **VTS** — built as dynamic modules.
 
 ```bash
 docker pull easydigital/nginx:latest
@@ -31,6 +31,8 @@ the nginx binary it could have produced is discarded.
 |---|---|---|
 | [ModSecurity 3](https://github.com/owasp-modsecurity/ModSecurity) + [connector](https://github.com/owasp-modsecurity/ModSecurity-nginx) | v3.0.16 / v1.0.4 | nginx ships no WAF |
 | [ngx_brotli](https://github.com/google/ngx_brotli) | pinned commit | nginx has gzip and no Brotli |
+| [zstd-nginx-module](https://github.com/tokers/zstd-nginx-module) | 0.1.1 | likewise; negotiated alongside Brotli, not instead of it |
+| [VTS](https://github.com/vozlt/nginx-module-vts) | v0.2.7 | per-vhost metrics in Prometheus format; `stub_status` is seven global counters |
 | [headers-more](https://github.com/openresty/headers-more-nginx-module) | v0.40 | nginx cannot unset an arbitrary response header |
 | [GeoIP2](https://github.com/leev/ngx_http_geoip2_module) | 3.4 | nginx's own GeoIP module reads only the legacy databases MaxMind stopped publishing |
 | [OWASP CRS](https://github.com/coreruleset/coreruleset) | v4.29.0 | shipped, **not loaded** |
