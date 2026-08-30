@@ -9,7 +9,7 @@
 # That is the point of this file. A source rebuild would put nginx's own security
 # updates on this image's release schedule instead of upstream's; here the final
 # stage *is* the official image, and a new nginx patch is a version bump and a
-# rebuild of five `.so` files.
+# rebuild of six `.so` files.
 #
 # # What is included, and why each
 #
@@ -21,6 +21,12 @@
 #   GeoIP2                     nginx's own ngx_http_geoip_module speaks the
 #                              legacy GeoIP databases MaxMind stopped
 #                              publishing; this reads .mmdb.
+#   VTS                        per-virtual-host traffic statistics, and the only
+#                              one of these that emits Prometheus. nginx ships
+#                              stub_status, which is seven plain-text counters
+#                              for the whole server with no per-host breakdown
+#                              and no Prometheus format -- not a metrics
+#                              endpoint anything can scrape usefully.
 #
 # # What is deliberately absent
 #
@@ -78,6 +84,7 @@ ARG NGINX_VERSION
 ARG MODSECURITY_NGINX_VERSION=v1.0.4
 ARG HEADERS_MORE_VERSION=v0.40
 ARG GEOIP2_VERSION=3.4
+ARG VTS_VERSION=v0.2.7
 # ngx_brotli publishes no releases, so this is a commit. Pinned rather than
 # tracking master: an unpinned dependency in a WAF-bearing gateway is a change
 # nobody reviewed arriving in a tag we already published.
@@ -100,14 +107,28 @@ RUN curl -fsSL "https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz" | tar 
         https://github.com/openresty/headers-more-nginx-module.git \
     && git clone --branch "${GEOIP2_VERSION}" --depth 1 \
         https://github.com/leev/ngx_http_geoip2_module.git \
+    && git clone --branch "${VTS_VERSION}" --depth 1 \
+        https://github.com/vozlt/nginx-module-vts.git \
     && git clone --recursive https://github.com/google/ngx_brotli.git \
     && git -C ngx_brotli checkout "${NGX_BROTLI_COMMIT}" \
     && git -C ngx_brotli submodule update --init --recursive
 
-# Brotli's bundled libbrotli must be built before nginx configures against it.
+# Brotli's bundled libbrotli, built before nginx configures against it.
+#
+# **Upstream's own example flags are wrong for a distributable image.**
+# ngx_brotli's README suggests `-march=native -mtune=native`, which compiles for
+# the CPU of whichever machine ran the build. In an image built on one host and
+# run on another that is an illegal-instruction crash on first request, and it
+# would pass every test performed on the build machine. They are omitted
+# deliberately; `-Ofast -fPIC` is what remains.
+#
+# BUILD_SHARED_LIBS=OFF so brotlienc links statically into the module, per
+# upstream. A shared build would leave the .so needing a libbrotlienc the final
+# image does not install.
 WORKDIR /usr/src/ngx_brotli/deps/brotli
 RUN mkdir -p out && cd out \
     && cmake -DCMAKE_BUILD_TYPE=Release \
+             -DBUILD_SHARED_LIBS=OFF \
              -DCMAKE_C_FLAGS="-Ofast -fPIC" \
              -DCMAKE_CXX_FLAGS="-Ofast -fPIC" \
              -DCMAKE_INSTALL_PREFIX=./installed .. \
@@ -116,6 +137,22 @@ RUN mkdir -p out && cd out \
 # `--with-compat` is mandatory and not optional tidiness: without it these
 # modules are rejected by the stock binary at load time with a version mismatch,
 # which is the whole reason this stage can exist separately from the image.
+#
+# **On whether the rest of the configure line must match the official image's:**
+# ngx_brotli's README says it must — "you will need to use exactly the same
+# ./configure arguments as your Nginx configuration … otherwise you will get a
+# 'module is not binary compatible' error on startup". nginx's own
+# documentation says `--with-compat` exists precisely to make that unnecessary.
+#
+# **Settled empirically on 2026-08-31: nginx's documentation is right and
+# ngx_brotli's README is wrong.** Built with nothing but the two flags below,
+# every module loads into the official binary — verified by the `nginx -t` at
+# the end of the final stage, which reports "syntax is ok" and announces
+# libmodsecurity3. Following ngx_brotli's advice would mean pasting a
+# forty-argument configure line here and re-verifying it on every nginx bump,
+# for no benefit.
+#
+# The `nginx -t` stays regardless: it is what would catch this changing.
 #
 # **The source version must equal the target image's version.** The
 # ModSecurity-nginx documentation states it outright — "when building a dynamic
@@ -133,11 +170,12 @@ RUN ./configure \
         --add-dynamic-module=../ModSecurity-nginx \
         --add-dynamic-module=../headers-more-nginx-module \
         --add-dynamic-module=../ngx_http_geoip2_module \
+        --add-dynamic-module=../nginx-module-vts \
         --add-dynamic-module=../ngx_brotli \
     && make -j"$(nproc)" modules
 
 # ─────────────────────────────────────────────────────────────────────────────
-# The image: stock nginx, plus the four modules and the rules
+# The image: stock nginx, plus the modules and the rules
 # ─────────────────────────────────────────────────────────────────────────────
 FROM nginx:${NGINX_VERSION}-${DEBIAN_RELEASE}
 
@@ -175,13 +213,33 @@ RUN mkdir -p /etc/nginx/modsecurity \
         | tar -xz -C /etc/nginx/modsecurity --strip-components=1 \
     && cp /etc/nginx/modsecurity/crs-setup.conf.example /etc/nginx/modsecurity/crs-setup.conf
 
-# Prove the four modules load into the stock binary before the image is
-# published. A module built against a mismatched nginx fails here, at build
-# time, rather than on a customer's gateway at start time.
-RUN printf 'load_module modules/ngx_http_modsecurity_module.so;\n\
+# Load the modules, and prove they load, before the image is published.
+#
+# # Why an include rather than five load_module lines in nginx.conf
+#
+# `load_module` is only valid in nginx's main context — it cannot go in
+# conf.d/*.conf, which is where the official image expects user configuration.
+# So the directives have to reach nginx.conf itself.
+#
+# Writing them into nginx.conf directly would work until somebody mounts their
+# own nginx.conf over it, which is the single most common way this image will be
+# used and which would silently unload every module. Instead nginx.conf gains
+# **one** include line, and the directives live in a file of their own:
+# replacing nginx.conf then costs one line to restore rather than five, and the
+# file it points at is the image's business rather than the user's.
+#
+# /etc/nginx/modules-enabled/ is created here because it does not exist in the
+# official image — that is a Debian *package* convention, not this image's, and
+# assuming it was the first version of this step's mistake.
+RUN mkdir -p /etc/nginx/modules-enabled \
+    && printf 'load_module modules/ngx_http_modsecurity_module.so;\n\
 load_module modules/ngx_http_headers_more_filter_module.so;\n\
 load_module modules/ngx_http_geoip2_module.so;\n\
+load_module modules/ngx_http_vhost_traffic_status_module.so;\n\
 load_module modules/ngx_http_brotli_filter_module.so;\n\
 load_module modules/ngx_http_brotli_static_module.so;\n' \
-        > /etc/nginx/modules-enabled/00-easydigital.conf \
+        > /etc/nginx/modules-enabled/10-modules.conf \
+    && printf 'include /etc/nginx/modules-enabled/*.conf;\n' | \
+        cat - /etc/nginx/nginx.conf > /tmp/nginx.conf \
+    && mv /tmp/nginx.conf /etc/nginx/nginx.conf \
     && nginx -t

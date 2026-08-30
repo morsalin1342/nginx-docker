@@ -19,6 +19,16 @@ docker run -d --name nginx \
 The modules are loaded and **every one of them does nothing until you configure it.** Drop-in
 replacement for `nginx:<version>` until you use one.
 
+> **If you replace `/etc/nginx/nginx.conf`**, keep this line at the top — `load_module` is only
+> valid in nginx's main context, so it cannot live in `conf.d/`, and without it none of the
+> modules below exist:
+>
+> ```nginx
+> include /etc/nginx/modules-enabled/*.conf;
+> ```
+>
+> Mounting into `conf.d/` instead needs no such care.
+
 ## What is included
 
 | Module | Directive to start with | Why it is not already in nginx |
