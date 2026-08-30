@@ -14,7 +14,7 @@ builder stages and copied in as `.so` files; nginx itself is never rebuilt.
 
 That is the whole design decision. Compiling nginx from source would put nginx's own security
 updates on this repository's release schedule instead of upstream's. Here a new nginx patch
-release is a one-line version bump and a rebuild of five shared objects.
+release is a one-line version bump and a rebuild of eight shared objects.
 
 It works because the official image is configured `--with-compat`, which nginx documents as
 enabling *"dynamic modules compatibility"*: a module built with a different `./configure` line
@@ -34,7 +34,7 @@ the nginx binary it could have produced is discarded.
 | [zstd-nginx-module](https://github.com/tokers/zstd-nginx-module) | 0.1.1 | likewise; negotiated alongside Brotli, not instead of it |
 | [VTS](https://github.com/vozlt/nginx-module-vts) | v0.2.7 | per-vhost metrics in Prometheus format; `stub_status` is seven global counters |
 | [headers-more](https://github.com/openresty/headers-more-nginx-module) | v0.40 | nginx cannot unset an arbitrary response header |
-| [GeoIP2](https://github.com/leev/ngx_http_geoip2_module) | 3.4 | nginx's own GeoIP module reads only the legacy databases MaxMind stopped publishing |
+| [GeoIP2](https://github.com/leev/ngx_http_geoip2_module) | 3.4 | nginx's own GeoIP module reads only the legacy databases MaxMind stopped publishing. **Bring your own `.mmdb`** — see below |
 | [OWASP CRS](https://github.com/coreruleset/coreruleset) | v4.29.0 | shipped, **not loaded** |
 
 `ngx_brotli` publishes no releases, so it is pinned to a commit rather than a branch. An
@@ -52,6 +52,25 @@ would be duplication:
 
 And these cannot be added to any open-source build, being NGINX Plus only: `api`, `auth_jwt`,
 `keyval`, `oidc`, `session_log`, `status`, `upstream_conf`, `upstream_hc`.
+
+## GeoIP2 needs a database you supply
+
+The module is built in; **no database ships with it.** MaxMind requires a free account and a
+licence key to download GeoLite2, and redistributing the `.mmdb` here would be neither legal
+nor current.
+
+Without one, `geoip2` variables silently return whatever `default=` you set — which looks like
+the module working. Mount a database and point at it:
+
+```nginx
+geoip2 /etc/maxmind/GeoLite2-Country.mmdb {
+    auto_reload 5m;                    # picks up database updates without a reload
+    $geoip2_country_code default=ZZ source=$remote_addr country iso_code;
+}
+```
+
+`geoip2_proxy` and `geoip2_proxy_recursive` exist for when nginx sits behind a proxy and
+`$remote_addr` is not the client.
 
 ## Nothing is enabled by default
 
@@ -72,10 +91,10 @@ docker run --rm nginx-custom nginx -t
 ```
 
 Overridable at build time: `NGINX_VERSION`, `DEBIAN_RELEASE`, `MODSECURITY_VERSION`,
-`MODSECURITY_NGINX_VERSION`, `HEADERS_MORE_VERSION`, `GEOIP2_VERSION`, `NGX_BROTLI_COMMIT`,
-`CRS_VERSION`.
+`MODSECURITY_NGINX_VERSION`, `HEADERS_MORE_VERSION`, `GEOIP2_VERSION`, `VTS_VERSION`,
+`NGX_BROTLI_COMMIT`, `ZSTD_MODULE_VERSION`, `ZSTD_VERSION`, `CRS_VERSION`.
 
-The final stage runs `nginx -t` with all five modules loaded, so a module built against a
+The final stage runs `nginx -t` with all eight modules loaded, so a module built against a
 mismatched nginx fails **the build** rather than a customer's server at start time.
 
 ## Tags
@@ -90,6 +109,24 @@ unchanged nginx version. **Pin by digest if you need immutability.**
 
 ModSecurity's dependency set — yajl, lmdb, libxml2, curl — is better served by glibc, and
 musl builds of it are a known source of subtle breakage.
+
+## Why ModSecurity and not ngx_waf
+
+`ngx_waf` was considered. It is ModSecurity-compatible and adds things this image otherwise
+lacks — rate-based automatic IP banning, verified-crawler allowlisting for Google/Bing/Baidu/
+Yandex, and hCaptcha/reCAPTCHA support — which together cover what a Caddy build gets from
+its rate-limit and defender modules.
+
+It was declined on maintenance. Its last upstream commit is January 2025 and the packaged
+release most distributions carry is v10.1.2 from July 2022. **For a firewall specifically,
+that is disqualifying in a way it would not be for a compression module** — and it pulls in
+libsodium, libcurl, cJSON, uthash and libinjection, widening the attack surface of the thing
+meant to reduce it.
+
+ModSecurity 3 is actively maintained and OWASP-governed, which is the one property a WAF
+cannot trade away. Its missing features have better-targeted answers: `limit_req` is built
+into nginx for rate limiting, and crawler verification or CAPTCHA belong in a module chosen
+for that job.
 
 ## Licence
 
