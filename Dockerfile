@@ -218,9 +218,29 @@ ENV ZSTD_LIB=/usr/local/zstd/lib
 # `make modules`, not `make`: this compiles only objs/*.so. The nginx binary
 # this stage could produce is never built and never shipped — the image is the
 # official one.
+# `--with-stream` is not about building nginx with stream support — nginx is
+# never built here. It tells the addon configs that the stream module *type* is
+# available, so those that have a stream variant emit one.
+#
+# GeoIP2 is the case. Its config carries
+#
+#   if [ $STREAM != NO -a $nginx_version -gt 1011001 ]; then
+#       ngx_module_name="ngx_stream_geoip2_module"
+#
+# and without this flag that branch is skipped **silently** — no warning, no
+# error, just a module that is not in the image and nobody notices until a
+# stream {} block references it. The official image ships stream variants of its
+# own geoip and js modules, so an image that offered only the http half of ours
+# would be the odd one out.
+#
+# The remaining modules are HTTP-only by nature: ModSecurity inspects HTTP,
+# Brotli and zstd are response filters, headers-more edits headers. VTS has a
+# stream counterpart but it is a separate project (nginx-module-stream-sts),
+# not a variant this flag would produce.
 WORKDIR /usr/src/nginx-${NGINX_VERSION}
 RUN ./configure \
         --with-compat \
+        --with-stream \
         --add-dynamic-module=../ModSecurity-nginx \
         --add-dynamic-module=../headers-more-nginx-module \
         --add-dynamic-module=../ngx_http_geoip2_module \

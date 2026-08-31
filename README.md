@@ -14,7 +14,7 @@ builder stages and copied in as `.so` files; nginx itself is never rebuilt.
 
 That is the whole design decision. Compiling nginx from source would put nginx's own security
 updates on this repository's release schedule instead of upstream's. Here a new nginx patch
-release is a one-line version bump and a rebuild of eight shared objects.
+release is a one-line version bump and a rebuild of nine shared objects.
 
 It works because the official image is configured `--with-compat`, which nginx documents as
 enabling *"dynamic modules compatibility"*: a module built with a different `./configure` line
@@ -34,7 +34,7 @@ the nginx binary it could have produced is discarded.
 | [zstd-nginx-module](https://github.com/tokers/zstd-nginx-module) | 0.1.1 | likewise; negotiated alongside Brotli, not instead of it |
 | [VTS](https://github.com/vozlt/nginx-module-vts) | v0.2.7 | per-vhost metrics in Prometheus format; `stub_status` is seven global counters |
 | [headers-more](https://github.com/openresty/headers-more-nginx-module) | v0.40 | nginx cannot unset an arbitrary response header |
-| [GeoIP2](https://github.com/leev/ngx_http_geoip2_module) | 3.4 | nginx's own GeoIP module reads only the legacy databases MaxMind stopped publishing. **Bring your own `.mmdb`** — see below |
+| [GeoIP2](https://github.com/leev/ngx_http_geoip2_module) (http **and** stream) | 3.4 | nginx's own GeoIP module reads only the legacy databases MaxMind stopped publishing. **Bring your own `.mmdb`** — see below |
 | [OWASP CRS](https://github.com/coreruleset/coreruleset) | v4.29.0 | shipped, **not loaded** |
 
 `ngx_brotli` publishes no releases, so it is pinned to a commit rather than a branch. An
@@ -94,7 +94,7 @@ Overridable at build time: `NGINX_VERSION`, `DEBIAN_RELEASE`, `MODSECURITY_VERSI
 `MODSECURITY_NGINX_VERSION`, `HEADERS_MORE_VERSION`, `GEOIP2_VERSION`, `VTS_VERSION`,
 `NGX_BROTLI_COMMIT`, `ZSTD_MODULE_VERSION`, `ZSTD_VERSION`, `CRS_VERSION`.
 
-The final stage runs `nginx -t` with all eight modules loaded, so a module built against a
+The final stage runs `nginx -t` with every module loaded, so a module built against a
 mismatched nginx fails **the build** rather than a customer's server at start time.
 
 ## Tags
