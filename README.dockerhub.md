@@ -2,12 +2,30 @@
 
 **Maintained by [morsalin1342](https://hub.docker.com/u/morsalin1342)** · [GitHub](https://github.com/morsalin1342/nginx-docker)
 
+[![Docker Pulls](https://img.shields.io/docker/pulls/morsalin1342/nginx?style=for-the-badge&logo=docker)](https://hub.docker.com/r/morsalin1342/nginx)
+[![Image Size](https://img.shields.io/docker/image-size/morsalin1342/nginx/latest?style=for-the-badge&logo=docker)](https://hub.docker.com/r/morsalin1342/nginx/tags)
+[![GitHub Stars](https://img.shields.io/github/stars/morsalin1342/nginx-docker?style=for-the-badge&logo=github)](https://github.com/morsalin1342/nginx-docker)
+[![License](https://img.shields.io/github/license/morsalin1342/nginx-docker?style=for-the-badge)](https://github.com/morsalin1342/nginx-docker/blob/master/LICENSE)
+
 Official nginx plus **ModSecurity 3**, **Brotli**, **Zstandard**, **headers-more**, **GeoIP2** and
 **VTS**, built as dynamic modules. The image *is* the official `nginx` image — the modules are compiled
 separately and loaded into the stock binary, so nginx's own security updates arrive on
 nginx's schedule, not this repository's.
 
-## Quick start
+## ✨ Why This Image?
+
+| Feature | Official image | This image |
+|---|---|---|
+| **Web application firewall** | ❌ | ✅ ModSecurity 3 + OWASP CRS, shipped off by default |
+| **Brotli / Zstandard** | ❌ | ✅ Both, negotiated per client |
+| **Per-vhost metrics** | `stub_status` — 7 global counters | ✅ VTS, Prometheus format |
+| **GeoIP** | Legacy databases only | ✅ GeoIP2 `.mmdb`, http and stream |
+| **Header removal** | ❌ | ✅ headers-more |
+| **Single-entry cache purge** | Zone-wide expiry only | ✅ cache-purge |
+| **OpenTelemetry** | ❌ | ✅ From nginx's own package repo |
+| **nginx itself rebuilt?** | — | ❌ Stock binary, modules load dynamically |
+
+## Quick Start
 
 ```bash
 docker run -d --name nginx \
@@ -29,7 +47,7 @@ replacement for `nginx:<version>` until you use one.
 >
 > Mounting into `conf.d/` instead needs no such care.
 
-## What is included
+## What's Included
 
 | Module | Directive to start with | Why it is not already in nginx |
 |---|---|---|
@@ -76,13 +94,13 @@ The connector also provides `modsecurity_rules_file`, `modsecurity_rules_remote`
 worth knowing: paired with `$request_id` in your `log_format`, it lets you correlate an access
 log line with the error log entry the WAF wrote for the same request.
 
-## Tags
+## Available Tags
 
 `<nginx-version>` and `latest`. The tag names the **upstream nginx release** the image is
 built on, and is republished when this repository's Dockerfile changes — a module bump or a
 CRS update can land under an unchanged nginx version. Pin by digest if you need immutability.
 
-## Verifying
+## Verifying the Build
 
 ```bash
 docker run --rm morsalin1342/nginx:latest nginx -V
@@ -91,6 +109,17 @@ docker run --rm morsalin1342/nginx:latest nginx -t
 
 Every published image runs `nginx -t` with every module loaded at build time, so a module
 built against a mismatched nginx fails the build rather than a running server.
+
+## ❓ FAQ
+
+**Q: Why does nothing happen after I pull it?**
+A: Every module is loaded and every one does nothing until configured. Until you write a directive this is a drop-in replacement for `nginx:<version>`.
+
+**Q: I replaced nginx.conf and the modules vanished.**
+A: `load_module` is only valid in the main context. Keep `include /etc/nginx/modules-enabled/*.conf;` at the top of your file, or mount into `conf.d/` instead.
+
+**Q: GeoIP2 returns my default for everything.**
+A: No database ships with the image — MaxMind requires an account. Mount a `.mmdb` and point `geoip2` at it.
 
 ---
 
@@ -102,3 +131,7 @@ built against a mismatched nginx fails the build rather than a running server.
 | [morsalin1342/frankenphp](https://hub.docker.com/r/morsalin1342/frankenphp) | Caddy + PHP app server in one container |
 | [morsalin1342/php](https://hub.docker.com/r/morsalin1342/php) | Traditional PHP-FPM & CLI images |
 | [easydigital/nginx](https://hub.docker.com/r/easydigital/nginx) | Enterprise org mirror |
+
+---
+
+⭐ **If this image helps you, consider giving it a star on [GitHub](https://github.com/morsalin1342/nginx-docker)!**
