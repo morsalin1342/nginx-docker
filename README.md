@@ -1,4 +1,4 @@
-# A Custom nginx Docker Image with Essential Modules
+# Production-Ready nginx Docker Image with Essential Modules
 
 [![Docker Pulls](https://img.shields.io/docker/pulls/morsalin1342/nginx.svg?style=for-the-badge&logo=docker)](https://hub.docker.com/r/morsalin1342/nginx)
 [![GitHub Stars](https://img.shields.io/github/stars/morsalin1342/nginx-docker?style=for-the-badge&logo=github)](https://github.com/morsalin1342/nginx-docker)
