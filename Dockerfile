@@ -276,10 +276,10 @@ FROM nginx:${NGINX_VERSION}-${DEBIAN_RELEASE}
 ARG NGINX_VERSION
 ARG CRS_VERSION=v4.29.0
 
-LABEL org.opencontainers.image.title="easydigital/nginx" \
+LABEL org.opencontainers.image.title="nginx" \
       org.opencontainers.image.description="nginx with ModSecurity 3, Brotli, headers-more and GeoIP2 as dynamic modules" \
-      org.opencontainers.image.source="https://github.com/easydigital/nginx-docker" \
-      org.opencontainers.image.licenses="BSD-2-Clause"
+      org.opencontainers.image.source="https://github.com/morsalin1342/nginx-docker" \
+      org.opencontainers.image.licenses="MIT"
 
 # Runtime libraries the modules link against. The -dev packages stay in the
 # builder; only the shared objects are needed here.

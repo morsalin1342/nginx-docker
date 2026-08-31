@@ -20,7 +20,7 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@v4
 
-      - name: Extract Caddy version from Dockerfile
+      - name: Extract nginx version from Dockerfile
         id: get_version
         run: |
           # The version lives in an ARG, not a FROM line: the final stage is

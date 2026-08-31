@@ -1,6 +1,6 @@
 # nginx — with the modules it does not ship
 
-**Maintained by [easydigital](https://hub.docker.com/u/easydigital)** · [GitHub](https://github.com/easydigital/nginx-docker)
+**Published by [easydigital](https://hub.docker.com/u/easydigital)** · [GitHub](https://github.com/morsalin1342/nginx-docker)
 
 Official nginx plus **ModSecurity 3**, **Brotli**, **Zstandard**, **headers-more**, **GeoIP2** and
 **VTS**, built as dynamic modules. The image *is* the official `nginx` image — the modules are compiled
@@ -36,8 +36,13 @@ replacement for `nginx:<version>` until you use one.
 | ModSecurity 3 | `modsecurity on;` | nginx ships no WAF |
 | Brotli | `brotli on;` | nginx has gzip only |
 | Zstandard | `zstd on;` | nginx has gzip only; zstd is negotiated by Chrome 123+ and Firefox 126+ |
+| VTS | `vhost_traffic_status on;` | per-vhost metrics in Prometheus format; `stub_status` is seven global counters |
 | headers-more | `more_clear_headers Server;` | nginx cannot unset arbitrary headers |
-| GeoIP2 | `geoip2 /path/db.mmdb { … }` | nginx's own GeoIP module reads only the legacy databases MaxMind stopped publishing |
+| GeoIP2 (http **and** stream) | `geoip2 /path/db.mmdb { … }` | nginx's own GeoIP module reads only the legacy databases MaxMind stopped publishing |
+| cache-purge | `proxy_cache_purge PURGE from …;` | open-source nginx can only expire a whole cache zone |
+| fancyindex | `fancyindex on;` | `autoindex` output is unstyleable |
+| upload-progress | `upload_progress proxied 1m;` | upload progress polling |
+| OpenTelemetry | `otel_trace on;` | OTLP/gRPC tracing — installed from nginx's own package repo |
 
 Already in official nginx and therefore **not** duplicated here: rate limiting (`limit_req`),
 connection limiting, `real_ip`, HTTP/2, HTTP/3, gzip, `sub_filter`, `secure_link`,
@@ -84,5 +89,16 @@ docker run --rm easydigital/nginx:latest nginx -V
 docker run --rm easydigital/nginx:latest nginx -t
 ```
 
-Every published image runs `nginx -t` with all five modules loaded at build time, so a module
+Every published image runs `nginx -t` with every module loaded at build time, so a module
 built against a mismatched nginx fails the build rather than a running server.
+
+---
+
+### 🔗 Related Images & Tools
+
+| Image / Tool | Description |
+|--------------|-------------|
+| [easydigital/caddy](https://hub.docker.com/r/easydigital/caddy) | Standalone Caddy with WAF, rate limiting & caching (org) |
+| [easydigital/frankenphp](https://hub.docker.com/r/easydigital/frankenphp) | Caddy + PHP app server in one container (org) |
+| [easydigital/php](https://hub.docker.com/r/easydigital/php) | Traditional PHP-FPM & CLI images (org) |
+| [morsalin1342/nginx](https://hub.docker.com/r/morsalin1342/nginx) | Personal account mirror |

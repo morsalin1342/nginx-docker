@@ -36,8 +36,13 @@ replacement for `nginx:<version>` until you use one.
 | ModSecurity 3 | `modsecurity on;` | nginx ships no WAF |
 | Brotli | `brotli on;` | nginx has gzip only |
 | Zstandard | `zstd on;` | nginx has gzip only; zstd is negotiated by Chrome 123+ and Firefox 126+ |
+| VTS | `vhost_traffic_status on;` | per-vhost metrics in Prometheus format; `stub_status` is seven global counters |
 | headers-more | `more_clear_headers Server;` | nginx cannot unset arbitrary headers |
-| GeoIP2 | `geoip2 /path/db.mmdb { … }` | nginx's own GeoIP module reads only the legacy databases MaxMind stopped publishing |
+| GeoIP2 (http **and** stream) | `geoip2 /path/db.mmdb { … }` | nginx's own GeoIP module reads only the legacy databases MaxMind stopped publishing |
+| cache-purge | `proxy_cache_purge PURGE from …;` | open-source nginx can only expire a whole cache zone |
+| fancyindex | `fancyindex on;` | `autoindex` output is unstyleable |
+| upload-progress | `upload_progress proxied 1m;` | upload progress polling |
+| OpenTelemetry | `otel_trace on;` | OTLP/gRPC tracing — installed from nginx's own package repo |
 
 Already in official nginx and therefore **not** duplicated here: rate limiting (`limit_req`),
 connection limiting, `real_ip`, HTTP/2, HTTP/3, gzip, `sub_filter`, `secure_link`,
@@ -84,5 +89,16 @@ docker run --rm morsalin1342/nginx:latest nginx -V
 docker run --rm morsalin1342/nginx:latest nginx -t
 ```
 
-Every published image runs `nginx -t` with all five modules loaded at build time, so a module
+Every published image runs `nginx -t` with every module loaded at build time, so a module
 built against a mismatched nginx fails the build rather than a running server.
+
+---
+
+### 🔗 Related Images & Tools
+
+| Image / Tool | Description |
+|--------------|-------------|
+| [morsalin1342/caddy](https://hub.docker.com/r/morsalin1342/caddy) | Standalone Caddy with WAF, rate limiting & caching |
+| [morsalin1342/frankenphp](https://hub.docker.com/r/morsalin1342/frankenphp) | Caddy + PHP app server in one container |
+| [morsalin1342/php](https://hub.docker.com/r/morsalin1342/php) | Traditional PHP-FPM & CLI images |
+| [easydigital/nginx](https://hub.docker.com/r/easydigital/nginx) | Enterprise org mirror |

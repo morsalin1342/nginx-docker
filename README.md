@@ -1,12 +1,30 @@
-# nginx-docker
+# nginx with the Modules It Does Not Ship
+
+[![Docker Pulls](https://img.shields.io/docker/pulls/morsalin1342/nginx.svg?style=for-the-badge&logo=docker)](https://hub.docker.com/r/morsalin1342/nginx)
+[![GitHub Stars](https://img.shields.io/github/stars/morsalin1342/nginx-docker?style=for-the-badge&logo=github)](https://github.com/morsalin1342/nginx-docker)
+[![License](https://img.shields.io/github/license/morsalin1342/nginx-docker?style=for-the-badge)](https://github.com/morsalin1342/nginx-docker/blob/master/LICENSE)
 
 Official nginx plus the modules it does not ship — **ModSecurity 3**, **Brotli**,
 **Zstandard**, **headers-more**, **GeoIP2**, **VTS** and **OpenTelemetry** — built as
 dynamic modules.
 
 ```bash
-docker pull easydigital/nginx:latest
+docker pull morsalin1342/nginx:latest
 ```
+
+## ✨ Why This Image?
+
+| Feature | Official `nginx` | This Image |
+|---------|-----------------|------------|
+| **Web application firewall** | ❌ | ✅ ModSecurity 3 + OWASP CRS (shipped, off by default) |
+| **Brotli compression** | ❌ | ✅ |
+| **Zstandard compression** | ❌ | ✅ negotiated alongside Brotli |
+| **Per-vhost metrics** | `stub_status` — 7 global counters | ✅ VTS, Prometheus format |
+| **GeoIP** | legacy databases only | ✅ GeoIP2 `.mmdb`, http **and** stream |
+| **Arbitrary header removal** | ❌ | ✅ headers-more |
+| **Single-entry cache purge** | zone-wide expiry only | ✅ cache-purge |
+| **OpenTelemetry tracing** | ❌ | ✅ from nginx's own package repo |
+| **nginx itself rebuilt?** | — | ❌ stock binary; modules load dynamically |
 
 ## What this is, and what it is not
 
@@ -106,7 +124,7 @@ nothing includes it — CRS in blocking mode has a real false-positive cost agai
 admin panels, and the exclusions for that are site-specific. Start in `DetectionOnly`, read
 your logs, then decide.
 
-## Building locally
+## Building Locally
 
 ```bash
 docker build -t nginx-custom .
@@ -186,8 +204,66 @@ cannot trade away. Its missing features have better-targeted answers: `limit_req
 into nginx for rate limiting, and crawler verification or CAPTCHA belong in a module chosen
 for that job.
 
-## Licence
+## ❓ FAQ
+
+**Q: How do I turn the WAF on?**
+A: Load the module (already loaded), point `modsecurity_rules_file` at a file that includes
+`crs-setup.conf` and `rules/*.conf`, then set `modsecurity on;`. Start in `DetectionOnly`,
+read your logs, and only then switch to blocking — CRS has a real false-positive cost against
+application admin panels, WordPress's `/wp-admin` in particular.
+
+**Q: I replaced `/etc/nginx/nginx.conf` and all the modules vanished. Why?**
+A: `load_module` is only valid in nginx's main context, so it cannot live in `conf.d/`. The
+image adds one include line to `nginx.conf`; if you replace that file, keep it:
+```nginx
+include /etc/nginx/modules-enabled/*.conf;
+```
+Mounting into `conf.d/` instead needs no such care.
+
+**Q: GeoIP2 returns my `default=` value for every request.**
+A: No database ships with the image — MaxMind requires an account and licence key, and
+redistributing the `.mmdb` here would be neither legal nor current. Mount one and point
+`geoip2` at it. See the GeoIP2 section above.
+
+**Q: Why is nothing enabled by default?**
+A: Every module is loaded and every one does nothing until configured, so this is a drop-in
+replacement for `nginx:<version>` until you write a directive. Enabling a WAF, or choosing
+detection versus blocking, belongs to whoever runs the server.
+
+**Q: Can I use this with PHP?**
+A: Yes — pair it with [morsalin1342/php](https://hub.docker.com/r/morsalin1342/php) over
+FastCGI. For a single-container Caddy+PHP app server instead, use
+[morsalin1342/frankenphp](https://hub.docker.com/r/morsalin1342/frankenphp).
+
+**Q: How do I add a module that isn't here?**
+A: Fork the repo, pin it to a tag or commit, and add an `--add-dynamic-module` line to the
+modules stage. See CONTRIBUTING.md — and check the "Deliberately absent" list first, because
+nginx may already do it.
+
+## License
 
 MIT for this repository's build files. The software it packages keeps its own licences: nginx
 (BSD-2-Clause), ModSecurity (Apache-2.0), OWASP CRS (Apache-2.0), Brotli (MIT), headers-more
 (BSD-2-Clause), ngx_http_geoip2_module (BSD-2-Clause).
+
+---
+
+## Related Images & Tools
+
+Every image is published to both the personal and the organization namespace, from the same build.
+
+| Repository | Images | Description |
+|---|---|---|
+| [caddy-docker](https://github.com/morsalin1342/caddy-docker) | `morsalin1342/caddy` · `easydigital/caddy` | Standalone Caddy with WAF, rate limiting & caching |
+| [frankenphp-docker](https://github.com/morsalin1342/frankenphp-docker) | `morsalin1342/frankenphp` · `easydigital/frankenphp` | Caddy + PHP app server in one container |
+| [php-docker](https://github.com/morsalin1342/php-docker) | `morsalin1342/php` · `easydigital/php` | Traditional PHP-FPM & CLI images |
+
+---
+
+## Feedback and Issues
+
+If you have suggestions, find a bug, or want to request a new module, please [open an issue](https://github.com/morsalin1342/nginx-docker/issues) on the GitHub repository.
+
+---
+
+⭐ **If this project helps you, consider giving it a star!**
