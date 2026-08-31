@@ -1,4 +1,4 @@
-# nginx — with the modules it does not ship
+# nginx — Enterprise Web Server
 
 **Published by [easydigital](https://hub.docker.com/u/easydigital)** · [GitHub](https://github.com/morsalin1342/nginx-docker)
 

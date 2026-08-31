@@ -1,4 +1,4 @@
-# nginx — with the modules it does not ship
+# nginx — Custom Web Server with Essential Modules
 
 **Maintained by [morsalin1342](https://hub.docker.com/u/morsalin1342)** · [GitHub](https://github.com/morsalin1342/nginx-docker)
 
