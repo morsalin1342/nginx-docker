@@ -54,8 +54,8 @@
 # Debian rather than Alpine: ModSecurity's dependency set — yajl, lmdb, libxml2,
 # curl — is better served by glibc.
 
-ARG NGINX_VERSION=1.27.5
-ARG DEBIAN_RELEASE=bookworm
+ARG NGINX_VERSION=1.30.4
+ARG DEBIAN_RELEASE=trixie
 
 # ─────────────────────────────────────────────────────────────────────────────
 # libmodsecurity — the WAF engine itself, which the nginx connector links against
@@ -79,7 +79,35 @@ WORKDIR /usr/src/ModSecurity
 RUN ./build.sh \
     && ./configure --disable-doxygen-doc --disable-doxygen-html --disable-examples \
     && make -j"$(nproc)" \
-    && make install
+    && make install \
+    # Strip the debug symbols. libmodsecurity.so is built unstripped and is
+    # ~175MB that way — by a wide margin the largest thing in the published
+    # image, and larger than the entire nginx base. Stripping takes it to
+    # single-digit megabytes and costs nothing anyone debugging this image
+    # would miss: the symbols belong in a -dbg artifact, not in every pull.
+    && strip --strip-unneeded /usr/local/modsecurity/lib/libmodsecurity.so.*.*.*
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LuaJIT — OpenResty's fork, which lua-nginx-module requires
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Not the upstream LuaJIT. OpenResty maintains its own fork with extensions
+# lua-nginx-module depends on, and building against plain LuaJIT produces a
+# module that compiles and then misbehaves.
+FROM debian:${DEBIAN_RELEASE}-slim AS luajit
+
+ARG LUAJIT_VERSION=v2.1-20260824
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential ca-certificates git \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN git clone --branch "${LUAJIT_VERSION}" --depth 1 \
+        https://github.com/openresty/luajit2.git /usr/src/luajit2 \
+    && make -C /usr/src/luajit2 -j"$(nproc)" \
+        CFLAGS="-O2 -fPIC" \
+        PREFIX=/usr/local/luajit \
+    && make -C /usr/src/luajit2 install PREFIX=/usr/local/luajit
 
 # ─────────────────────────────────────────────────────────────────────────────
 # The nginx modules, built against the exact nginx source of the final image
@@ -92,6 +120,20 @@ ARG HEADERS_MORE_VERSION=v0.40
 ARG GEOIP2_VERSION=3.4
 ARG VTS_VERSION=v0.2.7
 ARG ZSTD_MODULE_VERSION=0.1.1
+# Widely-deployed community modules. Each is pinned, each is optional at
+# runtime, and each earns its place by being something nginx cannot do alone.
+ARG NDK_VERSION=v0.3.4
+ARG SET_MISC_VERSION=v0.34
+ARG ECHO_VERSION=v0.65
+ARG REDIS2_VERSION=v0.15rc1
+ARG SRCACHE_VERSION=v0.34
+ARG MEMC_VERSION=v0.21
+ARG FANCYINDEX_VERSION=v0.6.0
+ARG CACHE_PURGE_VERSION=3.0.2
+ARG UPLOAD_PROGRESS_VERSION=v0.9.4
+ARG LUA_NGINX_VERSION=v0.10.29R2
+ARG LUA_RESTY_CORE_VERSION=v0.1.32R1
+ARG LUA_RESTY_LRUCACHE_VERSION=v0.15
 # ngx_brotli publishes no releases, so this is a commit. Pinned rather than
 # tracking master: an unpinned dependency in a WAF-bearing gateway is a change
 # nobody reviewed arriving in a tag we already published.
@@ -114,6 +156,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=modsecurity /usr/local/modsecurity /usr/local/modsecurity
+COPY --from=luajit /usr/local/luajit /usr/local/luajit
+
+# lua-nginx-module's config reads these two to find LuaJIT.
+ENV LUAJIT_LIB=/usr/local/luajit/lib
+ENV LUAJIT_INC=/usr/local/luajit/include/luajit-2.1
 
 WORKDIR /usr/src
 
@@ -128,6 +175,30 @@ RUN curl -fsSL "https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz" | tar 
         https://github.com/vozlt/nginx-module-vts.git \
     && git clone --branch "${ZSTD_MODULE_VERSION}" --depth 1 \
         https://github.com/tokers/zstd-nginx-module.git \
+    && git clone --branch "${NDK_VERSION}" --depth 1 \
+        https://github.com/vision5/ngx_devel_kit.git \
+    && git clone --branch "${SET_MISC_VERSION}" --depth 1 \
+        https://github.com/openresty/set-misc-nginx-module.git \
+    && git clone --branch "${ECHO_VERSION}" --depth 1 \
+        https://github.com/openresty/echo-nginx-module.git \
+    && git clone --branch "${REDIS2_VERSION}" --depth 1 \
+        https://github.com/openresty/redis2-nginx-module.git \
+    && git clone --branch "${SRCACHE_VERSION}" --depth 1 \
+        https://github.com/openresty/srcache-nginx-module.git \
+    && git clone --branch "${MEMC_VERSION}" --depth 1 \
+        https://github.com/openresty/memc-nginx-module.git \
+    && git clone --branch "${FANCYINDEX_VERSION}" --depth 1 \
+        https://github.com/aperezdc/ngx-fancyindex.git \
+    && git clone --branch "${CACHE_PURGE_VERSION}" --depth 1 \
+        https://github.com/nginx-modules/ngx_cache_purge.git \
+    && git clone --branch "${UPLOAD_PROGRESS_VERSION}" --depth 1 \
+        https://github.com/masterzen/nginx-upload-progress-module.git \
+    && git clone --branch "${LUA_NGINX_VERSION}" --depth 1 \
+        https://github.com/openresty/lua-nginx-module.git \
+    && git clone --branch "${LUA_RESTY_CORE_VERSION}" --depth 1 \
+        https://github.com/openresty/lua-resty-core.git \
+    && git clone --branch "${LUA_RESTY_LRUCACHE_VERSION}" --depth 1 \
+        https://github.com/openresty/lua-resty-lrucache.git \
     && git clone --recursive https://github.com/google/ngx_brotli.git \
     && git -C ngx_brotli checkout "${NGX_BROTLI_COMMIT}" \
     && git -C ngx_brotli submodule update --init --recursive
@@ -245,6 +316,16 @@ RUN ./configure \
         --add-dynamic-module=../headers-more-nginx-module \
         --add-dynamic-module=../ngx_http_geoip2_module \
         --add-dynamic-module=../nginx-module-vts \
+        --add-dynamic-module=../ngx_devel_kit \
+        --add-dynamic-module=../set-misc-nginx-module \
+        --add-dynamic-module=../echo-nginx-module \
+        --add-dynamic-module=../redis2-nginx-module \
+        --add-dynamic-module=../srcache-nginx-module \
+        --add-dynamic-module=../memc-nginx-module \
+        --add-dynamic-module=../ngx-fancyindex \
+        --add-dynamic-module=../ngx_cache_purge \
+        --add-dynamic-module=../nginx-upload-progress-module \
+        --add-dynamic-module=../lua-nginx-module \
         --add-dynamic-module=../zstd-nginx-module \
         --add-dynamic-module=../ngx_brotli \
     && make -j"$(nproc)" modules
@@ -268,10 +349,67 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libcurl4 libgeoip1 liblmdb0 libmaxminddb0 libxml2 libyajl2 libzstd1 \
     && rm -rf /var/lib/apt/lists/*
 
+# OpenTelemetry, from nginx's own package repository rather than built here.
+#
+# ngx_otel_module is the one module in this image that upstream packages
+# itself, and the package is the right way to get it. It is built by nginx
+# against the exact binary this image is based on — the official image installs
+# `nginx` from this same repository — so the compatibility question the rest of
+# this Dockerfile answers with --with-compat does not arise at all.
+#
+# Building it from source would mean pulling in gRPC, protobuf and
+# opentelemetry-cpp through CMake: a long build, a large dependency surface,
+# and a worse binary-compatibility story than the artifact upstream ships.
+#
+# **The version is pinned to nginx's**, `<nginx>+<module>-1~<release>`. A
+# mismatched pair is refused by apt rather than loaded, which is the failure
+# mode worth having.
+ARG DEBIAN_RELEASE
+ARG OTEL_MODULE_VERSION=0.1.2
+# The signing key is verified, not trusted blindly: apt checks the repository
+# signature against it. gnupg is installed only to dearmor the key and is
+# removed again, so it is not part of the published image.
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends gnupg; \
+    curl -fsSL https://nginx.org/keys/nginx_signing.key \
+        | gpg --dearmor > /usr/share/keyrings/nginx-archive-keyring.gpg; \
+    printf 'deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] %s %s nginx\n' \
+        'https://nginx.org/packages/debian' "${DEBIAN_RELEASE}" \
+        > /etc/apt/sources.list.d/nginx.list; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        "nginx-module-otel=${NGINX_VERSION}+${OTEL_MODULE_VERSION}-1~${DEBIAN_RELEASE}"; \
+    apt-get purge -y --auto-remove gnupg; \
+    rm -rf /var/lib/apt/lists/* /etc/apt/sources.list.d/nginx.list
+
 COPY --from=modsecurity /usr/local/modsecurity/lib/libmodsecurity.so* /usr/local/modsecurity/lib/
 COPY --from=modules /usr/src/nginx-${NGINX_VERSION}/objs/*.so /usr/lib/nginx/modules/
 
-RUN ldconfig /usr/local/modsecurity/lib
+# LuaJIT's runtime library, and the two Lua libraries lua-nginx-module needs.
+#
+# The module links against libluajit-5.1.so.2, so the shared object has to be
+# here and on the loader's path — building it in a separate stage and copying
+# only the .so files would produce a module that compiles and then fails
+# `dlopen()` at start time, which is exactly what happened first.
+#
+# lua-resty-core and lua-resty-lrucache are not optional extras. Since 0.10.16
+# lua-nginx-module *requires* lua-resty-core and refuses to start without it.
+# They are plain Lua source, so they are copied from the module checkouts
+# rather than built.
+#
+# **The two versions are pinned to each other exactly.** lua-resty-core's
+# base.lua tests `ngx.config.ngx_lua_version ~= <n>` — an equality, not a
+# minimum — so a mismatched pair aborts every worker at startup with
+# "ngx_http_lua_module 0.10.29 required". The newest lua-nginx-module is
+# v0.10.31 and it is deliberately **not** used: no stable lua-resty-core
+# release pairs with it yet (v0.1.32R1, the newest, requires 10029). Bump
+# these two together or not at all.
+COPY --from=luajit /usr/local/luajit/lib/libluajit-5.1.so* /usr/local/luajit/lib/
+COPY --from=modules /usr/src/lua-resty-core/lib/ /usr/local/share/lua/5.1/
+COPY --from=modules /usr/src/lua-resty-lrucache/lib/ /usr/local/share/lua/5.1/
+
+RUN ldconfig /usr/local/modsecurity/lib /usr/local/luajit/lib
 
 # The OWASP Core Rule Set, shipped but **not enabled**.
 #
@@ -306,17 +444,53 @@ RUN mkdir -p /etc/nginx/modsecurity \
 # /etc/nginx/modules-enabled/ is created here because it does not exist in the
 # official image — that is a Debian *package* convention, not this image's, and
 # assuming it was the first version of this step's mistake.
+#
+# The list is generated from the modules that actually built rather than typed
+# out. A hand-written list is two artifacts that must agree, and the one that
+# drifts is the list: a module added to the configure line above but forgotten
+# here builds, ships, and is never loaded by anybody.
 RUN mkdir -p /etc/nginx/modules-enabled \
-    && printf 'load_module modules/ngx_http_modsecurity_module.so;\n\
-load_module modules/ngx_http_headers_more_filter_module.so;\n\
-load_module modules/ngx_http_geoip2_module.so;\n\
-load_module modules/ngx_http_vhost_traffic_status_module.so;\n\
-load_module modules/ngx_http_brotli_filter_module.so;\n\
-load_module modules/ngx_http_brotli_static_module.so;\n\
-load_module modules/ngx_http_zstd_filter_module.so;\n\
-load_module modules/ngx_http_zstd_static_module.so;\n' \
-        > /etc/nginx/modules-enabled/10-modules.conf \
+    && for so in /usr/lib/nginx/modules/*.so; do \
+           case "$so" in *-debug.so) continue ;; esac; \
+           echo "load_module modules/$(basename "$so");"; \
+       done > /etc/nginx/modules-enabled/10-modules.conf \
     && printf 'include /etc/nginx/modules-enabled/*.conf;\n' | \
         cat - /etc/nginx/nginx.conf > /tmp/nginx.conf \
     && mv /tmp/nginx.conf /etc/nginx/nginx.conf \
+    && printf '# Room for the variables these modules register.\n\
+#\n\
+# set-misc, echo and srcache each define a good number, and past roughly a\n\
+# dozen modules nginx warns "could not build optimal variables_hash" on every\n\
+# start. It is only a warning and the server runs, but it is noise this image\n\
+# creates by shipping the modules, so this image clears it.\n\
+variables_hash_max_size 2048;\n' > /etc/nginx/conf.d/00-variables-hash.conf \
+    && printf '# Where lua-nginx-module finds resty.core, which it requires to start.\n\
+lua_package_path "/usr/local/share/lua/5.1/?.lua;/usr/local/share/lua/5.1/?/init.lua;;";\n' \
+        > /etc/nginx/conf.d/01-lua-package-path.conf \
     && nginx -t
+
+# Start nginx for real, and serve one request, before the image is published.
+#
+# `nginx -t` is not enough and this step exists because of a specific escape.
+# The config test parses the configuration and loads the modules; it does
+# **not** initialise the Lua VM. A mismatched lua-nginx-module/lua-resty-core
+# pair therefore passes `nginx -t` cleanly and then aborts every worker at
+# startup with "failed to load the 'resty.core' module" — an image that tests
+# green and serves nothing. Only actually starting finds it.
+# `-e` redirects the error log to a real file: in this image
+# /var/log/nginx/error.log is a symlink to /dev/stderr, which cannot be read
+# back, and the failure this step exists to catch is *logged* rather than
+# returned — nginx starts, the workers abort, and the exit status says nothing.
+RUN set -e; \
+    nginx -e /tmp/startup.log -g 'daemon off;' & \
+    pid=$!; \
+    for i in $(seq 1 20); do \
+        curl -fsS -o /dev/null http://127.0.0.1/ && break; \
+        sleep 0.5; \
+    done; \
+    curl -fsS -o /dev/null http://127.0.0.1/; \
+    kill "$pid"; \
+    if grep -qiE '\[(emerg|alert|crit)\]' /tmp/startup.log; then \
+        echo 'nginx logged a startup error:'; cat /tmp/startup.log; exit 1; \
+    fi; \
+    rm -f /tmp/startup.log

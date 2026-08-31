@@ -1,7 +1,8 @@
 # nginx-docker
 
-Official nginx plus the modules it does not ship — **ModSecurity 3**, **Brotli**,
-**Zstandard**, **headers-more**, **GeoIP2** and **VTS** — built as dynamic modules.
+Official nginx plus the modules it does not ship — **ModSecurity 3**, **Lua**, **Brotli**,
+**Zstandard**, **headers-more**, **GeoIP2**, **VTS**, **OpenTelemetry** and the OpenResty
+toolkit — built as dynamic modules.
 
 ```bash
 docker pull easydigital/nginx:latest
@@ -35,6 +36,11 @@ the nginx binary it could have produced is discarded.
 | [VTS](https://github.com/vozlt/nginx-module-vts) | v0.2.7 | per-vhost metrics in Prometheus format; `stub_status` is seven global counters |
 | [headers-more](https://github.com/openresty/headers-more-nginx-module) | v0.40 | nginx cannot unset an arbitrary response header |
 | [GeoIP2](https://github.com/leev/ngx_http_geoip2_module) (http **and** stream) | 3.4 | nginx's own GeoIP module reads only the legacy databases MaxMind stopped publishing. **Bring your own `.mmdb`** — see below |
+| [lua-nginx-module](https://github.com/openresty/lua-nginx-module) + LuaJIT | v0.10.29R2 | scripting in the request lifecycle; nginx has no general extension language |
+| [ngx_devel_kit](https://github.com/vision5/ngx_devel_kit), [set-misc](https://github.com/openresty/set-misc-nginx-module), [echo](https://github.com/openresty/echo-nginx-module) | v0.3.4 / v0.34 / v0.65 | the OpenResty toolkit the modules below build on |
+| [srcache](https://github.com/openresty/srcache-nginx-module), [redis2](https://github.com/openresty/redis2-nginx-module), [memc](https://github.com/openresty/memc-nginx-module) | v0.34 / v0.15rc1 / v0.21 | caching responses into Redis or memcached |
+| [cache-purge](https://github.com/nginx-modules/ngx_cache_purge), [fancyindex](https://github.com/aperezdc/ngx-fancyindex), [upload-progress](https://github.com/masterzen/nginx-upload-progress-module) | 3.0.2 / v0.6.0 / v0.9.4 | selective cache invalidation, themed directory listings, upload tracking |
+| [ngx_otel_module](https://github.com/nginxinc/nginx-otel) | 0.1.2 | OTLP/gRPC tracing — **from nginx's own package repo**, not built here |
 | [OWASP CRS](https://github.com/coreruleset/coreruleset) | v4.29.0 | shipped, **not loaded** |
 
 `ngx_brotli` publishes no releases, so it is pinned to a commit rather than a branch. An
@@ -50,8 +56,27 @@ would be duplication:
 `gzip_static` · `sub_filter` · `secure_link` · `auth_request` · `map` · `geo` · `slice` ·
 `stream` with `ssl_preread`
 
-And these cannot be added to any open-source build, being NGINX Plus only: `api`, `auth_jwt`,
-`keyval`, `oidc`, `session_log`, `status`, `upstream_conf`, `upstream_hc`.
+**Mail** is complete already: `--with-mail` and `--with-mail_ssl_module` are compiled into the
+official image, which is all eight of `mail_core`, `mail_auth_http`, `mail_proxy`,
+`mail_realip`, `mail_ssl`, `mail_imap`, `mail_pop3` and `mail_smtp`.
+
+**Stream** likewise, apart from GeoIP2's stream variant which this image adds: `stream_core`,
+`stream_access`, `stream_geo`, `stream_geoip`, `stream_js`, `stream_limit_conn`, `stream_log`,
+`stream_map`, `stream_pass`, `stream_proxy`, `stream_realip`, `stream_return`, `stream_set`,
+`stream_split_clients`, `stream_ssl`, `stream_ssl_preread` and `stream_upstream`.
+
+And these cannot be added to any open-source build, being NGINX Plus only — verified against
+nginx.org, each of which documents itself as *"part of our commercial subscription"*:
+
+- **HTTP:** `api`, `auth_jwt`, `f4f`, `hls`, `keyval`, `mp4_*`, `oidc`, `session_log`,
+  `status`, `upstream_conf`
+- **Stream:** `keyval`, `mqtt_preread`, `mqtt_filter`, `num_map`, `proxy_protocol_vendor`,
+  `upstream_hc`, `zone_sync`
+
+Two of those shape what open-source nginx can do and are worth knowing before you plan around
+them: **`stream_zone_sync`** replicates shared zones between instances, so multi-node rate
+limiting needs a different design here; and **`upstream_hc`** is *active* health checking —
+open-source nginx has only the passive `max_fails`/`fail_timeout`.
 
 ## GeoIP2 needs a database you supply
 
@@ -92,10 +117,20 @@ docker run --rm nginx-custom nginx -t
 
 Overridable at build time: `NGINX_VERSION`, `DEBIAN_RELEASE`, `MODSECURITY_VERSION`,
 `MODSECURITY_NGINX_VERSION`, `HEADERS_MORE_VERSION`, `GEOIP2_VERSION`, `VTS_VERSION`,
-`NGX_BROTLI_COMMIT`, `ZSTD_MODULE_VERSION`, `ZSTD_VERSION`, `CRS_VERSION`.
+`NGX_BROTLI_COMMIT`, `ZSTD_MODULE_VERSION`, `ZSTD_VERSION`, `CRS_VERSION`, `LUAJIT_VERSION`,
+`LUA_NGINX_VERSION`, `LUA_RESTY_CORE_VERSION`, `LUA_RESTY_LRUCACHE_VERSION`,
+`OTEL_MODULE_VERSION`, and the OpenResty toolkit's `NDK_VERSION`, `SET_MISC_VERSION`,
+`ECHO_VERSION`, `REDIS2_VERSION`, `SRCACHE_VERSION`, `MEMC_VERSION`, `FANCYINDEX_VERSION`,
+`CACHE_PURGE_VERSION`, `UPLOAD_PROGRESS_VERSION`.
 
-The final stage runs `nginx -t` with every module loaded, so a module built against a
-mismatched nginx fails **the build** rather than a customer's server at start time.
+**`LUA_NGINX_VERSION` and `LUA_RESTY_CORE_VERSION` move together.** lua-resty-core tests
+`ngx.config.ngx_lua_version ~= <n>` — an equality, not a minimum — so a mismatched pair passes
+`nginx -t` and then aborts every worker at startup. That is why the build also starts nginx and
+serves a request: a config test does not initialise the Lua VM and cannot catch it.
+
+The final stage runs `nginx -t` with every module loaded **and then starts nginx and serves a
+request**, so a module built against a mismatched nginx fails **the build** rather than a
+customer's server at start time.
 
 ## Tags
 
@@ -104,6 +139,18 @@ mismatched nginx fails **the build** rather than a customer's server at start ti
 The tag names the **upstream nginx release**, not a build of this repository — so it is
 republished when the Dockerfile changes. A module bump or a CRS update can land under an
 unchanged nginx version. **Pin by digest if you need immutability.**
+
+## Why the OTel module is installed, not compiled
+
+Every other module here is built from source because upstream nginx does not package it.
+`ngx_otel_module` is the exception: nginx publishes `nginx-module-otel` in **the same
+repository the official image installs nginx from**, built against that exact binary. The
+compatibility question `--with-compat` exists to answer does not arise for it at all.
+
+Compiling it instead would pull gRPC, protobuf and opentelemetry-cpp in through CMake — a long
+build and a large dependency surface, for a worse binary-compatibility story than the artifact
+upstream already ships. The version is pinned as `<nginx>+<module>-1~<release>`, so a
+mismatched pair is refused by apt rather than loaded.
 
 ## Debian, not Alpine
 
