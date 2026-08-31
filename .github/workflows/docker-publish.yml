@@ -72,6 +72,7 @@ jobs:
           password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
           repository: ${{ secrets.DOCKER_HUB_USERNAME }}/nginx
           readme-filepath: ./README.dockerhub.md
+          short-description: 'nginx with ModSecurity 3, Brotli, Zstandard, GeoIP2, VTS and OpenTelemetry dynamic modules'
 
       - name: Update Docker Hub description (org repo)
         uses: peter-evans/dockerhub-description@v4
@@ -80,3 +81,4 @@ jobs:
           password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
           repository: ${{ secrets.DOCKER_HUB_ORG }}/nginx
           readme-filepath: ./README.dockerhub-org.md
+          short-description: 'nginx with ModSecurity 3, Brotli, Zstandard, GeoIP2, VTS and OpenTelemetry dynamic modules'
