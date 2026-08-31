@@ -1,8 +1,8 @@
 # nginx-docker
 
-Official nginx plus the modules it does not ship — **ModSecurity 3**, **Lua**, **Brotli**,
-**Zstandard**, **headers-more**, **GeoIP2**, **VTS**, **OpenTelemetry** and the OpenResty
-toolkit — built as dynamic modules.
+Official nginx plus the modules it does not ship — **ModSecurity 3**, **Brotli**,
+**Zstandard**, **headers-more**, **GeoIP2**, **VTS** and **OpenTelemetry** — built as
+dynamic modules.
 
 ```bash
 docker pull easydigital/nginx:latest
@@ -36,10 +36,9 @@ the nginx binary it could have produced is discarded.
 | [VTS](https://github.com/vozlt/nginx-module-vts) | v0.2.7 | per-vhost metrics in Prometheus format; `stub_status` is seven global counters |
 | [headers-more](https://github.com/openresty/headers-more-nginx-module) | v0.40 | nginx cannot unset an arbitrary response header |
 | [GeoIP2](https://github.com/leev/ngx_http_geoip2_module) (http **and** stream) | 3.4 | nginx's own GeoIP module reads only the legacy databases MaxMind stopped publishing. **Bring your own `.mmdb`** — see below |
-| [lua-nginx-module](https://github.com/openresty/lua-nginx-module) + LuaJIT | v0.10.29R2 | scripting in the request lifecycle; nginx has no general extension language |
-| [ngx_devel_kit](https://github.com/vision5/ngx_devel_kit), [set-misc](https://github.com/openresty/set-misc-nginx-module), [echo](https://github.com/openresty/echo-nginx-module) | v0.3.4 / v0.34 / v0.65 | the OpenResty toolkit the modules below build on |
-| [srcache](https://github.com/openresty/srcache-nginx-module), [redis2](https://github.com/openresty/redis2-nginx-module), [memc](https://github.com/openresty/memc-nginx-module) | v0.34 / v0.15rc1 / v0.21 | caching responses into Redis or memcached |
-| [cache-purge](https://github.com/nginx-modules/ngx_cache_purge), [fancyindex](https://github.com/aperezdc/ngx-fancyindex), [upload-progress](https://github.com/masterzen/nginx-upload-progress-module) | 3.0.2 / v0.6.0 / v0.9.4 | selective cache invalidation, themed directory listings, upload tracking |
+| [cache-purge](https://github.com/nginx-modules/ngx_cache_purge) | 3.0.2 | invalidating a single `proxy_cache` entry; nginx open source can only expire the whole zone |
+| [fancyindex](https://github.com/aperezdc/ngx-fancyindex) | v0.6.0 | themed directory listings; `autoindex` output is unstyleable |
+| [upload-progress](https://github.com/masterzen/nginx-upload-progress-module) | v0.9.4 | upload progress polling |
 | [ngx_otel_module](https://github.com/nginxinc/nginx-otel) | 0.1.2 | OTLP/gRPC tracing — **from nginx's own package repo**, not built here |
 | [OWASP CRS](https://github.com/coreruleset/coreruleset) | v4.29.0 | shipped, **not loaded** |
 
@@ -117,16 +116,8 @@ docker run --rm nginx-custom nginx -t
 
 Overridable at build time: `NGINX_VERSION`, `DEBIAN_RELEASE`, `MODSECURITY_VERSION`,
 `MODSECURITY_NGINX_VERSION`, `HEADERS_MORE_VERSION`, `GEOIP2_VERSION`, `VTS_VERSION`,
-`NGX_BROTLI_COMMIT`, `ZSTD_MODULE_VERSION`, `ZSTD_VERSION`, `CRS_VERSION`, `LUAJIT_VERSION`,
-`LUA_NGINX_VERSION`, `LUA_RESTY_CORE_VERSION`, `LUA_RESTY_LRUCACHE_VERSION`,
-`OTEL_MODULE_VERSION`, and the OpenResty toolkit's `NDK_VERSION`, `SET_MISC_VERSION`,
-`ECHO_VERSION`, `REDIS2_VERSION`, `SRCACHE_VERSION`, `MEMC_VERSION`, `FANCYINDEX_VERSION`,
-`CACHE_PURGE_VERSION`, `UPLOAD_PROGRESS_VERSION`.
-
-**`LUA_NGINX_VERSION` and `LUA_RESTY_CORE_VERSION` move together.** lua-resty-core tests
-`ngx.config.ngx_lua_version ~= <n>` — an equality, not a minimum — so a mismatched pair passes
-`nginx -t` and then aborts every worker at startup. That is why the build also starts nginx and
-serves a request: a config test does not initialise the Lua VM and cannot catch it.
+`NGX_BROTLI_COMMIT`, `ZSTD_MODULE_VERSION`, `ZSTD_VERSION`, `CRS_VERSION`,
+`OTEL_MODULE_VERSION`, `FANCYINDEX_VERSION`, `CACHE_PURGE_VERSION`, `UPLOAD_PROGRESS_VERSION`.
 
 The final stage runs `nginx -t` with every module loaded **and then starts nginx and serves a
 request**, so a module built against a mismatched nginx fails **the build** rather than a
@@ -139,6 +130,26 @@ customer's server at start time.
 The tag names the **upstream nginx release**, not a build of this repository — so it is
 republished when the Dockerfile changes. A module bump or a CRS update can land under an
 unchanged nginx version. **Pin by digest if you need immutability.**
+
+## Why there is no Lua
+
+Lua and the OpenResty toolkit — `lua-nginx-module` on LuaJIT, plus `ngx_devel_kit`,
+`set-misc`, `echo`, `redis2`, `srcache` and `memc` — were built here and **removed on
+2026-08-31**. They worked; they were dropped because nothing needed them.
+
+The reasoning is worth recording, because "it builds cleanly" is a weak argument for shipping
+something. This image's job is to be a **gateway**: terminate TLS, route, filter, compress,
+report. `srcache`, `redis2` and `memc` cache responses into Redis or memcached, which is
+*application*-tier work that belongs to whatever server sits behind the gateway. `echo` and
+`set-misc` are conveniences for writing that kind of logic in configuration. And Lua is the
+general answer to "what if we need to do something nginx cannot express" — a real capability,
+but one that pulls a second language runtime, a version-pairing constraint tight enough to
+break a build, and roughly 10MB of LuaJIT into every pull, in exchange for a need nobody has
+articulated yet.
+
+If that need arrives, the modules go back: each is a version pin, a clone and a
+`--add-dynamic-module` line. Carrying them *before* it arrives is how an image accumulates
+surface that nobody can later justify removing.
 
 ## Why the OTel module is installed, not compiled
 
