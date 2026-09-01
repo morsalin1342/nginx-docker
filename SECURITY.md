@@ -8,9 +8,13 @@
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in this image, please report it by opening an issue on GitHub:
+**Please report privately**, using GitHub's private vulnerability reporting:
 
-- [Report a vulnerability](https://github.com/morsalin1342/nginx-docker/issues/new)
+- [Report a vulnerability](https://github.com/morsalin1342/nginx-docker/security/advisories/new)
+
+That keeps the details between us until there is a fix to ship. Please do not open a public
+issue for a security problem — a public issue discloses the vulnerability to everyone,
+including anyone who would use it, before there is anything to upgrade to.
 
 Please include:
 - A clear description of the vulnerability
