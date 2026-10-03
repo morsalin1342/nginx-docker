@@ -250,13 +250,16 @@ MIT for this repository's build files. The software it packages keeps its own li
 
 ## Related Images & Tools
 
-Every image is published to both the personal and the organization namespace, from the same build.
+<!-- BEGIN GENERATED: related (from images.yaml in the org .github repository; do not edit by hand) -->
+Every image is published under `morsalin1342` (personal) and `easydigital` (organization), from the same build.
 
 | Repository | Images | Description |
 |---|---|---|
 | [caddy-docker](https://github.com/morsalin1342/caddy-docker) | `morsalin1342/caddy` · `easydigital/caddy` | Standalone Caddy with WAF, rate limiting & caching |
 | [frankenphp-docker](https://github.com/morsalin1342/frankenphp-docker) | `morsalin1342/frankenphp` · `easydigital/frankenphp` | Caddy + PHP app server in one container |
 | [php-docker](https://github.com/morsalin1342/php-docker) | `morsalin1342/php` · `easydigital/php` | Traditional PHP-FPM & CLI images |
+| [apache-docker](https://github.com/morsalin1342/apache-docker) | `morsalin1342/apache` · `easydigital/apache` | Apache as a static server or php-fpm application server, no PHP inside |
+<!-- END GENERATED: related -->
 
 ---
 
