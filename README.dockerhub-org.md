@@ -37,7 +37,7 @@ nginx's schedule, not this repository's.
 # production.yml
 services:
   nginx:
-    image: easydigital/nginx:1.30.4
+    image: easydigital/nginx:1.30.5
     restart: always
     ports:
       - "80:80"

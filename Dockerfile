@@ -54,7 +54,7 @@
 # Debian rather than Alpine: ModSecurity's dependency set — yajl, lmdb, libxml2,
 # curl — is better served by glibc.
 
-ARG NGINX_VERSION=1.30.4
+ARG NGINX_VERSION=1.30.5
 ARG DEBIAN_RELEASE=trixie
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -62,7 +62,7 @@ ARG DEBIAN_RELEASE=trixie
 # ─────────────────────────────────────────────────────────────────────────────
 FROM debian:${DEBIAN_RELEASE}-slim AS modsecurity
 
-ARG MODSECURITY_VERSION=v3.0.16
+ARG MODSECURITY_VERSION=v3.0.17
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         autoconf automake build-essential ca-certificates git libtool pkg-config \
@@ -101,7 +101,7 @@ ARG ZSTD_MODULE_VERSION=0.1.1
 # Widely-deployed community modules. Each is pinned, each is optional at
 # runtime, and each earns its place by being something nginx cannot do alone.
 ARG FANCYINDEX_VERSION=v0.6.0
-ARG CACHE_PURGE_VERSION=3.0.2
+ARG CACHE_PURGE_VERSION=3.0.3
 ARG UPLOAD_PROGRESS_VERSION=v0.9.4
 # ngx_brotli publishes no releases, so this is a commit. Pinned rather than
 # tracking master: an unpinned dependency in a WAF-bearing gateway is a change
@@ -190,7 +190,7 @@ RUN mkdir -p out && cd out \
 # That typo is presumably why every packager of this module links it statically.
 #
 # So: our own libzstd, PIC, and the static path it already prefers.
-ARG ZSTD_VERSION=1.5.6
+ARG ZSTD_VERSION=1.5.7
 
 WORKDIR /usr/src
 RUN curl -fsSL "https://github.com/facebook/zstd/releases/download/v${ZSTD_VERSION}/zstd-${ZSTD_VERSION}.tar.gz" \
@@ -274,7 +274,7 @@ RUN ./configure \
 FROM nginx:${NGINX_VERSION}-${DEBIAN_RELEASE}
 
 ARG NGINX_VERSION
-ARG CRS_VERSION=v4.29.0
+ARG CRS_VERSION=v4.30.0
 
 LABEL org.opencontainers.image.title="nginx" \
       org.opencontainers.image.description="nginx with ModSecurity 3, Brotli, headers-more and GeoIP2 as dynamic modules" \
@@ -282,9 +282,10 @@ LABEL org.opencontainers.image.title="nginx" \
       org.opencontainers.image.licenses="MIT"
 
 # Runtime libraries the modules link against. The -dev packages stay in the
-# builder; only the shared objects are needed here.
+# builder; only the shared objects are needed here. `acl` (setfacl, getfacl) lets
+# an entrypoint grant a user access to a directory without changing its owner.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libcurl4 libgeoip1 liblmdb0 libmaxminddb0 libxml2 libyajl2 libzstd1 \
+        acl libcurl4 libgeoip1 liblmdb0 libmaxminddb0 libxml2 libyajl2 libzstd1 \
     && rm -rf /var/lib/apt/lists/*
 
 # OpenTelemetry, from nginx's own package repository rather than built here.

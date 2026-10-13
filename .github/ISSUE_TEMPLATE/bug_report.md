@@ -7,7 +7,7 @@ assignees: ''
 ---
 
 **Image tag(s) affected**
-<!-- e.g. morsalin1342/nginx:1.30.4 -->
+<!-- e.g. morsalin1342/nginx:1.30.5 -->
 
 **Describe the bug**
 <!-- A clear description of what's wrong -->

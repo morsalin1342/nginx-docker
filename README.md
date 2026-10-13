@@ -48,17 +48,19 @@ the nginx binary it could have produced is discarded.
 
 | Module | Version | Why it is not already in nginx |
 |---|---|---|
-| [ModSecurity 3](https://github.com/owasp-modsecurity/ModSecurity) + [connector](https://github.com/owasp-modsecurity/ModSecurity-nginx) | v3.0.16 / v1.0.4 | nginx ships no WAF |
+| [ModSecurity 3](https://github.com/owasp-modsecurity/ModSecurity) + [connector](https://github.com/owasp-modsecurity/ModSecurity-nginx) | v3.0.17 / v1.0.4 | nginx ships no WAF |
 | [ngx_brotli](https://github.com/google/ngx_brotli) | pinned commit | nginx has gzip and no Brotli |
 | [zstd-nginx-module](https://github.com/tokers/zstd-nginx-module) | 0.1.1 | likewise; negotiated alongside Brotli, not instead of it |
 | [VTS](https://github.com/vozlt/nginx-module-vts) | v0.2.7 | per-vhost metrics in Prometheus format; `stub_status` is seven global counters |
 | [headers-more](https://github.com/openresty/headers-more-nginx-module) | v0.40 | nginx cannot unset an arbitrary response header |
 | [GeoIP2](https://github.com/leev/ngx_http_geoip2_module) (http **and** stream) | 3.4 | nginx's own GeoIP module reads only the legacy databases MaxMind stopped publishing. **Bring your own `.mmdb`** — see below |
-| [cache-purge](https://github.com/nginx-modules/ngx_cache_purge) | 3.0.2 | invalidating a single `proxy_cache` entry; nginx open source can only expire the whole zone |
+| [cache-purge](https://github.com/nginx-modules/ngx_cache_purge) | 3.0.3 | invalidating a single `proxy_cache` entry; nginx open source can only expire the whole zone |
 | [fancyindex](https://github.com/aperezdc/ngx-fancyindex) | v0.6.0 | themed directory listings; `autoindex` output is unstyleable |
 | [upload-progress](https://github.com/masterzen/nginx-upload-progress-module) | v0.9.4 | upload progress polling |
 | [ngx_otel_module](https://github.com/nginxinc/nginx-otel) | 0.1.2 | OTLP/gRPC tracing — **from nginx's own package repo**, not built here |
-| [OWASP CRS](https://github.com/coreruleset/coreruleset) | v4.29.0 | shipped, **not loaded** |
+| [OWASP CRS](https://github.com/coreruleset/coreruleset) | v4.30.0 | shipped, **not loaded** |
+
+The image also contains `acl` (`setfacl`, `getfacl`), so an entrypoint can give a user access to a directory without changing its owner. The base is `nginx:1.30.5` on Debian trixie; the dynamic modules are compiled against exactly that nginx version.
 
 `ngx_brotli` publishes no releases, so it is pinned to a commit rather than a branch. An
 unpinned dependency in a WAF-bearing image is a change nobody reviewed arriving under a tag
