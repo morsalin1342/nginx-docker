@@ -36,7 +36,8 @@ builder stages and copied in as `.so` files; nginx itself is never rebuilt.
 
 That is the whole design decision. Compiling nginx from source would put nginx's own security
 updates on this repository's release schedule instead of upstream's. Here a new nginx patch
-release is a one-line version bump and a rebuild of nine shared objects.
+release is a one-line version bump and a rebuild of twelve shared objects. The thirteenth,
+`ngx_otel_module`, is installed from nginx's own package repository.
 
 It works because the official image is configured `--with-compat`, which nginx documents as
 enabling *"dynamic modules compatibility"*: a module built with a different `./configure` line
@@ -62,6 +63,13 @@ the nginx binary it could have produced is discarded.
 | [upload-progress](https://github.com/masterzen/nginx-upload-progress-module) | v0.9.4 | upload progress polling |
 | [ngx_otel_module](https://github.com/nginxinc/nginx-otel) | 0.1.2 | OTLP/gRPC tracing — **from nginx's own package repo**, not built here |
 | [OWASP CRS](https://github.com/coreruleset/coreruleset) | v4.30.0 | shipped, **not loaded** |
+
+That is ten modules in thirteen `.so` files: Brotli, Zstandard and GeoIP2 each build two
+(`ngx_http_brotli_filter_module` and `ngx_http_brotli_static_module`,
+`ngx_http_zstd_filter_module` and `ngx_http_zstd_static_module`, `ngx_http_geoip2_module` and
+`ngx_stream_geoip2_module`). `/etc/nginx/modules-enabled/10-modules.conf` loads exactly those
+thirteen. The dynamic modules the official image ships and does not load (njs, image_filter,
+xslt, geoip and acme) are not loaded here either; add a `load_module` line for any you use.
 
 The image also contains `acl` (`setfacl`, `getfacl`), so an entrypoint can give a user access to a directory without changing its owner. The base is `nginx:1.30.7` on Debian trixie; the dynamic modules are compiled against exactly that nginx version.
 
@@ -121,7 +129,8 @@ geoip2 /etc/maxmind/GeoLite2-Country.mmdb {
 
 ## Nothing is enabled by default
 
-Every module is loaded and every one of them does nothing until configured. Until you write a
+This image's modules are loaded and every one of them does nothing until configured. The
+official image's own dynamic modules stay unloaded, as they are there. Until you write a
 directive, this is a drop-in replacement for `nginx:<version>`.
 
 ModSecurity in particular stays off. The Core Rule Set ships at `/etc/nginx/modsecurity/` and
@@ -249,8 +258,9 @@ redistributing the `.mmdb` here would be neither legal nor current. Mount one an
 `geoip2` at it. See the GeoIP2 section above.
 
 **Q: Why is nothing enabled by default?**
-A: Every module is loaded and every one does nothing until configured, so this is a drop-in
-replacement for `nginx:<version>` until you write a directive. Enabling a WAF, or choosing
+A: This image's modules are loaded and every one does nothing until configured, and the official
+image's own dynamic modules stay unloaded, so this is a drop-in replacement for
+`nginx:<version>` until you write a directive. Enabling a WAF, or choosing
 detection versus blocking, belongs to whoever runs the server.
 
 **Q: Can I use this with PHP?**

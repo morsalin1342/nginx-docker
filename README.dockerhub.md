@@ -7,8 +7,9 @@
 [![GitHub Stars](https://img.shields.io/github/stars/morsalin1342/nginx-docker?style=for-the-badge&logo=github)](https://github.com/morsalin1342/nginx-docker)
 [![License](https://img.shields.io/github/license/morsalin1342/nginx-docker?style=for-the-badge)](https://github.com/morsalin1342/nginx-docker/blob/master/LICENSE)
 
-Official nginx plus **ModSecurity 3**, **Brotli**, **Zstandard**, **headers-more**, **GeoIP2** and
-**VTS**, built as dynamic modules. The image *is* the official `nginx` image — the modules are compiled
+Official nginx plus **ModSecurity 3**, **Brotli**, **Zstandard**, **headers-more**, **GeoIP2**,
+**VTS**, **cache-purge**, **fancyindex**, **upload-progress** and **OpenTelemetry**, as dynamic
+modules. The image *is* the official `nginx` image — the modules are compiled
 separately and loaded into the stock binary, so nginx's own security updates arrive on
 nginx's schedule, not this repository's.
 
@@ -36,8 +37,9 @@ docker run -d --name nginx \
     morsalin1342/nginx:latest
 ```
 
-The modules are loaded and **every one of them does nothing until you configure it.** Drop-in
-replacement for `nginx:<version>` until you use one.
+This image's modules are loaded and **every one of them does nothing until you configure it.**
+The official image's own dynamic modules (njs, image_filter, xslt, geoip, acme) stay unloaded,
+as they are there. Drop-in replacement for `nginx:<version>` until you use one.
 
 > **If you replace `/etc/nginx/nginx.conf`**, keep this line at the top — `load_module` is only
 > valid in nginx's main context, so it cannot live in `conf.d/`, and without it none of the
@@ -121,7 +123,7 @@ built against a mismatched nginx fails the build rather than a running server.
 ## ❓ FAQ
 
 **Q: Why does nothing happen after I pull it?**
-A: Every module is loaded and every one does nothing until configured. Until you write a directive this is a drop-in replacement for `nginx:<version>`.
+A: This image's modules are loaded and every one does nothing until configured; the official image's own dynamic modules stay unloaded. Until you write a directive this is a drop-in replacement for `nginx:<version>`.
 
 **Q: I replaced nginx.conf and the modules vanished.**
 A: `load_module` is only valid in the main context. Keep `include /etc/nginx/modules-enabled/*.conf;` at the top of your file, or mount into `conf.d/` instead.

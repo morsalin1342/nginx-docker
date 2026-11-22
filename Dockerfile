@@ -1,7 +1,8 @@
 # nginx with the modules it does not ship.
 #
-# Official nginx plus ModSecurity 3, Brotli, headers-more and GeoIP2, built as
-# **dynamic** modules against the matching nginx release. The official image is
+# Official nginx plus ModSecurity 3, Brotli, Zstandard, headers-more, GeoIP2,
+# VTS, cache-purge, fancyindex, upload-progress and OpenTelemetry, as
+# **dynamic** modules for the matching nginx release. The official image is
 # configured `--with-compat`, which nginx documents as enabling "dynamic modules
 # compatibility" — modules built separately load into the stock binary rather
 # than requiring nginx itself to be rebuilt.
@@ -9,7 +10,8 @@
 # That is the point of this file. A source rebuild would put nginx's own security
 # updates on this image's release schedule instead of upstream's; here the final
 # stage *is* the official image, and a new nginx patch is a version bump and a
-# rebuild of six `.so` files.
+# rebuild of twelve `.so` files. The thirteenth, ngx_otel_module, is installed
+# from nginx's own package repository rather than built.
 #
 # # What is included, and why each
 #
@@ -33,6 +35,11 @@
 #                              for the whole server with no per-host breakdown
 #                              and no Prometheus format -- not a metrics
 #                              endpoint anything can scrape usefully.
+#   cache-purge                removes one proxy_cache entry; open-source nginx
+#                              can only let a whole zone expire.
+#   fancyindex                 themed directory listings.
+#   upload-progress            upload progress polling.
+#   ngx_otel_module            OpenTelemetry tracing, from nginx's packages.
 #
 # # What is deliberately absent
 #
@@ -46,10 +53,11 @@
 #
 # # Nothing is enabled by default
 #
-# The modules are loaded, and every one of them does nothing until configured.
-# ModSecurity in particular stays off: `modsecurity on;` is the operator's
-# decision, and the Core Rule Set has a real false-positive cost on
-# application admin panels.
+# This image's modules are loaded, and every one of them does nothing until
+# configured. The dynamic modules the official image ships (njs, image_filter,
+# xslt, geoip, acme) stay unloaded, as they are there. ModSecurity in particular
+# stays off: `modsecurity on;` is the operator's decision, and the Core Rule Set
+# has a real false-positive cost on application admin panels.
 #
 # Debian rather than Alpine: ModSecurity's dependency set — yajl, lmdb, libxml2,
 # curl — is better served by glibc.
@@ -357,7 +365,8 @@ RUN ./configure \
         --add-dynamic-module=../nginx-upload-progress-module \
         --add-dynamic-module=../zstd-nginx-module \
         --add-dynamic-module=../ngx_brotli \
-    && make -j"$(nproc)" modules
+    && make -j"$(nproc)" modules \
+    && find objs -maxdepth 1 -name '*.so' -printf '%f\n' | sort > /usr/src/built-modules.txt
 
 # ─────────────────────────────────────────────────────────────────────────────
 # The image: stock nginx, plus the modules and the rules
@@ -378,7 +387,7 @@ ARG CRS_SHA256=3d678a41fd5aade34760127fef5dd64fd7a77848913fc0f70dde0cf467c94427
 # has been derived for all of it. The base image sets no licences label today; the
 # empty value keeps it that way if one is added.
 LABEL org.opencontainers.image.title="nginx" \
-      org.opencontainers.image.description="nginx with ModSecurity 3, Brotli, headers-more and GeoIP2 as dynamic modules" \
+      org.opencontainers.image.description="nginx with ModSecurity 3, Brotli, Zstandard, headers-more, GeoIP2, VTS, cache-purge, fancyindex, upload-progress and OpenTelemetry as dynamic modules" \
       org.opencontainers.image.source="https://github.com/morsalin1342/nginx-docker" \
       org.opencontainers.image.licenses=""
 
@@ -447,6 +456,7 @@ RUN NGINX_PACKAGE_KEYS="573BFD6B3D8FBC641079A6ABABF5BD827BD9BF62 \
 
 COPY --from=modsecurity /usr/local/modsecurity/lib/libmodsecurity.so* /usr/local/modsecurity/lib/
 COPY --from=modules /usr/src/nginx-${NGINX_VERSION}/objs/*.so /usr/lib/nginx/modules/
+COPY --from=modules /usr/src/built-modules.txt /tmp/built-modules.txt
 
 RUN ldconfig /usr/local/modsecurity/lib
 
@@ -469,9 +479,9 @@ RUN mkdir -p /etc/nginx/modsecurity \
     && rm /tmp/crs.tar.gz \
     && cp /etc/nginx/modsecurity/crs-setup.conf.example /etc/nginx/modsecurity/crs-setup.conf
 
-# Load the modules, and prove they load, before the image is published.
+# Load this image's modules, and prove they load, before the image is published.
 #
-# # Why an include rather than five load_module lines in nginx.conf
+# # Why an include rather than thirteen load_module lines in nginx.conf
 #
 # `load_module` is only valid in nginx's main context — it cannot go in
 # conf.d/*.conf, which is where the official image expects user configuration.
@@ -481,26 +491,55 @@ RUN mkdir -p /etc/nginx/modsecurity \
 # own nginx.conf over it, which is the single most common way this image will be
 # used and which would silently unload every module. Instead nginx.conf gains
 # **one** include line, and the directives live in a file of their own:
-# replacing nginx.conf then costs one line to restore rather than five, and the
-# file it points at is the image's business rather than the user's.
+# replacing nginx.conf then costs one line to restore rather than thirteen, and
+# the file it points at is the image's business rather than the user's.
 #
 # /etc/nginx/modules-enabled/ is created here because it does not exist in the
 # official image — that is a Debian *package* convention, not this image's, and
 # assuming it was the first version of this step's mistake.
 #
-# The list is generated from the modules that actually built rather than typed
-# out. A hand-written list is two artifacts that must agree, and the one that
-# drifts is the list: a module added to the configure line above but forgotten
-# here builds, ships, and is never loaded by anybody.
-RUN mkdir -p /etc/nginx/modules-enabled \
-    && for so in /usr/lib/nginx/modules/*.so; do \
-           case "$so" in *-debug.so) continue ;; esac; \
-           echo "load_module modules/$(basename "$so");"; \
-       done > /etc/nginx/modules-enabled/10-modules.conf \
-    && printf 'include /etc/nginx/modules-enabled/*.conf;\n' | \
-        cat - /etc/nginx/nginx.conf > /tmp/nginx.conf \
-    && mv /tmp/nginx.conf /etc/nginx/nginx.conf \
-    && nginx -t
+# # Why the list is written out
+#
+# /usr/lib/nginx/modules also holds the dynamic modules the official image
+# ships — njs, image_filter, xslt, geoip and acme — which the official image
+# does not load. Loading everything in the directory loaded those too, so the
+# image behaved differently from the one it claims to be a drop-in for. The list
+# is this image's own thirteen: the twelve built above and ngx_otel_module.
+#
+# A hand-written list can drift from what the modules stage builds, so it is
+# checked here: every .so the build produced must be in the list, and every
+# file the list names must exist, or the build fails.
+RUN set -e; \
+    mkdir -p /etc/nginx/modules-enabled; \
+    printf 'load_module modules/%s;\n' \
+        ngx_http_modsecurity_module.so \
+        ngx_http_brotli_filter_module.so \
+        ngx_http_brotli_static_module.so \
+        ngx_http_zstd_filter_module.so \
+        ngx_http_zstd_static_module.so \
+        ngx_http_headers_more_filter_module.so \
+        ngx_http_geoip2_module.so \
+        ngx_stream_geoip2_module.so \
+        ngx_http_vhost_traffic_status_module.so \
+        ngx_http_cache_purge_module.so \
+        ngx_http_fancyindex_module.so \
+        ngx_http_uploadprogress_module.so \
+        ngx_otel_module.so \
+        > /etc/nginx/modules-enabled/10-modules.conf; \
+    while read -r so; do \
+        grep -qxF "load_module modules/${so};" /etc/nginx/modules-enabled/10-modules.conf \
+            || { echo "built ${so} but 10-modules.conf does not load it" >&2; exit 1; }; \
+    done < /tmp/built-modules.txt; \
+    sed -n 's|^load_module modules/\(.*\);$|\1|p' /etc/nginx/modules-enabled/10-modules.conf \
+        | while read -r so; do \
+            test -f "/usr/lib/nginx/modules/${so}" \
+                || { echo "10-modules.conf loads ${so}, which is not in the image" >&2; exit 1; }; \
+        done; \
+    rm -f /tmp/built-modules.txt; \
+    printf 'include /etc/nginx/modules-enabled/*.conf;\n' \
+        | cat - /etc/nginx/nginx.conf > /tmp/nginx.conf; \
+    mv /tmp/nginx.conf /etc/nginx/nginx.conf; \
+    nginx -t
 
 # Start nginx for real, and serve one request, before the image is published.
 #
