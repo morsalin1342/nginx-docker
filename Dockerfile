@@ -62,8 +62,15 @@ ARG DEBIAN_RELEASE=trixie
 # ─────────────────────────────────────────────────────────────────────────────
 FROM debian:${DEBIAN_RELEASE}-slim AS modsecurity
 
+# bash with pipefail for every RUN below, so a failed download in front of a
+# pipe fails the build instead of handing the next command an empty stream.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 ARG MODSECURITY_VERSION=v3.0.17
 
+# Unpinned on purpose: these are Debian's current packages for the release,
+# security fixes included. hadolint's DL3008 asks for version pins.
+# hadolint ignore=DL3008
 RUN apt-get update && apt-get install -y --no-install-recommends \
         autoconf automake build-essential ca-certificates git libtool pkg-config \
         libcurl4-openssl-dev libgeoip-dev liblmdb-dev libpcre2-dev libssl-dev \
@@ -92,6 +99,8 @@ RUN ./build.sh \
 # ─────────────────────────────────────────────────────────────────────────────
 FROM debian:${DEBIAN_RELEASE}-slim AS modules
 
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 ARG NGINX_VERSION
 ARG MODSECURITY_NGINX_VERSION=v1.0.4
 ARG HEADERS_MORE_VERSION=v0.40
@@ -117,6 +126,8 @@ ARG UPLOAD_PROGRESS_VERSION=v0.9.4
 # two-line change.
 ARG NGX_BROTLI_COMMIT=a71f9312c2deb28875acc7bacfdd5695a111aa53
 
+# Unpinned on purpose, as in the stage above.
+# hadolint ignore=DL3008
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential ca-certificates cmake curl git libtool pkg-config \
         libcurl4-openssl-dev libgeoip-dev liblmdb-dev libmaxminddb-dev \
@@ -161,13 +172,13 @@ RUN curl -fsSL "https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz" | tar 
 # upstream. A shared build would leave the .so needing a libbrotlienc the final
 # image does not install.
 WORKDIR /usr/src/ngx_brotli/deps/brotli
-RUN mkdir -p out && cd out \
-    && cmake -DCMAKE_BUILD_TYPE=Release \
+RUN cmake -S . -B out \
+             -DCMAKE_BUILD_TYPE=Release \
              -DBUILD_SHARED_LIBS=OFF \
              -DCMAKE_C_FLAGS="-Ofast -fPIC" \
              -DCMAKE_CXX_FLAGS="-Ofast -fPIC" \
-             -DCMAKE_INSTALL_PREFIX=./installed .. \
-    && cmake --build . --config Release --target brotlienc
+             -DCMAKE_INSTALL_PREFIX=./installed \
+    && cmake --build out --config Release --target brotlienc
 
 # libzstd, built with -fPIC so it can link into a shared object.
 #
@@ -273,6 +284,8 @@ RUN ./configure \
 # ─────────────────────────────────────────────────────────────────────────────
 FROM nginx:${NGINX_VERSION}-${DEBIAN_RELEASE}
 
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 ARG NGINX_VERSION
 ARG CRS_VERSION=v4.30.0
 
@@ -293,7 +306,8 @@ LABEL org.opencontainers.image.title="nginx" \
 # Every package the base image ships is upgraded to Debian's security releases
 # at build time, so a fix Debian has published (zlib1g CVE-2026-85091, apt,
 # libcares2, libexpat1, libbrotli1) is in the image even before the official
-# base image is rebuilt.
+# base image is rebuilt. Unpinned for the same reason.
+# hadolint ignore=DL3008
 RUN apt-get update && apt-get upgrade -y --no-install-recommends \
     && apt-get install -y --no-install-recommends \
         acl libcurl4 libgeoip1 liblmdb0 libmaxminddb0 libxml2 libyajl2 libzstd1 \
@@ -319,6 +333,7 @@ ARG OTEL_MODULE_VERSION=0.1.2
 # The signing key is verified, not trusted blindly: apt checks the repository
 # signature against it. gnupg is installed only to dearmor the key and is
 # removed again, so it is not part of the published image.
+# hadolint ignore=DL3008
 RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends gnupg; \
@@ -402,12 +417,13 @@ RUN mkdir -p /etc/nginx/modules-enabled \
 RUN set -e; \
     nginx -e /tmp/startup.log -g 'daemon off;' & \
     pid=$!; \
-    for i in $(seq 1 20); do \
+    for _ in $(seq 1 20); do \
         curl -fsS -o /dev/null http://127.0.0.1/ && break; \
         sleep 0.5; \
     done; \
     curl -fsS -o /dev/null http://127.0.0.1/; \
-    kill "$pid"; \
+    nginx -e /tmp/startup.log -s quit; \
+    wait "$pid"; \
     if grep -qiE '\[(emerg|alert|crit)\]' /tmp/startup.log; then \
         echo 'nginx logged a startup error:'; cat /tmp/startup.log; exit 1; \
     fi; \
