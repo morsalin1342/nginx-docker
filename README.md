@@ -141,6 +141,15 @@ Overridable at build time: `NGINX_VERSION`, `DEBIAN_RELEASE`, `MODSECURITY_VERSI
 `MODSECURITY_NGINX_VERSION`, `HEADERS_MORE_VERSION`, `GEOIP2_VERSION`, `VTS_VERSION`,
 `NGX_BROTLI_COMMIT`, `ZSTD_MODULE_VERSION`, `ZSTD_VERSION`, `CRS_VERSION`,
 `OTEL_MODULE_VERSION`, `FANCYINDEX_VERSION`, `CACHE_PURGE_VERSION`, `UPLOAD_PROGRESS_VERSION`.
+Each module's `*_VERSION` has a matching `*_COMMIT`, and `ZSTD_VERSION` and `CRS_VERSION` a
+matching `ZSTD_SHA256` and `CRS_SHA256`; change them together.
+
+**What the build verifies.** The nginx source tarball must carry a good signature from one of
+the nginx release keys whose fingerprints are written in the Dockerfile. The package signing
+key for `nginx-module-otel` is checked against its three pinned fingerprints before apt uses it.
+Each module is fetched as its pinned commit, and the pinned tag must still point at that
+commit. The zstd and CRS tarballs must match their pinned SHA-256. Any mismatch fails the
+build.
 
 The final stage runs `nginx -t` with every module loaded **and then starts nginx and serves a
 request**, so a module built against a mismatched nginx fails **the build** rather than a

@@ -66,7 +66,11 @@ FROM debian:${DEBIAN_RELEASE}-slim AS modsecurity
 # pipe fails the build instead of handing the next command an empty stream.
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
+# The tag and the commit it points at. The commit is what is fetched; the tag
+# is checked against it, so a tag moved upstream fails the build rather than
+# changing what this image contains.
 ARG MODSECURITY_VERSION=v3.0.17
+ARG MODSECURITY_COMMIT=1925753989ccce977cdaae417b55c9726c7cf02c
 
 # Unpinned on purpose: these are Debian's current packages for the release,
 # security fixes included. hadolint's DL3008 asks for version pins.
@@ -77,12 +81,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libxml2-dev libyajl-dev zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# --depth 1 with the submodules: ModSecurity vendors its parser generators, and
-# a full history clone is roughly ten times the download for no benefit.
-RUN git clone --branch "${MODSECURITY_VERSION}" --depth 1 --recursive \
-        https://github.com/owasp-modsecurity/ModSecurity /usr/src/ModSecurity
-
+# One commit, no history, then the submodules at the commits that commit
+# records: ModSecurity vendors its parser generators, and a full history clone
+# is roughly ten times the download for no benefit.
 WORKDIR /usr/src/ModSecurity
+RUN git init -q . \
+    && git remote add origin https://github.com/owasp-modsecurity/ModSecurity \
+    && git fetch -q --depth 1 origin "${MODSECURITY_COMMIT}" \
+    && git checkout -q --detach FETCH_HEAD \
+    && test "$(git rev-parse HEAD)" = "${MODSECURITY_COMMIT}" \
+    && tagged="$(git ls-remote origin "refs/tags/${MODSECURITY_VERSION}" "refs/tags/${MODSECURITY_VERSION}^{}" | sort -k2 | tail -n1 | cut -f1)" \
+    && { test "$tagged" = "${MODSECURITY_COMMIT}" \
+         || { echo "${MODSECURITY_VERSION} is ${tagged:-missing} upstream, not ${MODSECURITY_COMMIT}" >&2; exit 1; }; } \
+    && git submodule update -q --init --recursive
+
 RUN ./build.sh \
     && ./configure --disable-doxygen-doc --disable-doxygen-html --disable-examples \
     && make -j"$(nproc)" \
@@ -101,20 +113,33 @@ FROM debian:${DEBIAN_RELEASE}-slim AS modules
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
+# Every module is pinned twice: the release tag, and the commit that tag points
+# at. The commit is what is fetched and checked out; the tag is checked against
+# it at build time, so a tag that moves upstream fails the build instead of
+# quietly changing what a published image contains. scripts/check-upstream.sh
+# reports when a newer release exists.
 ARG NGINX_VERSION
 ARG MODSECURITY_NGINX_VERSION=v1.0.4
+ARG MODSECURITY_NGINX_COMMIT=3f4b57df10ce43b1f1c722141f7621dc64838be8
 ARG HEADERS_MORE_VERSION=v0.40
+ARG HEADERS_MORE_COMMIT=0bf283ff92017acd616814b0e5153e0ccf93e2c9
 ARG GEOIP2_VERSION=3.4
+ARG GEOIP2_COMMIT=cbaa35461c62a99d2577e6bae3273492502d8769
 ARG VTS_VERSION=v0.2.7
+ARG VTS_COMMIT=38b8612527ecb003ea15cefe934f302cf1a7c27e
 ARG ZSTD_MODULE_VERSION=0.1.1
+ARG ZSTD_MODULE_COMMIT=6be764e2bed04f889af824eff2d4dd737ebdab5a
 # Widely-deployed community modules. Each is pinned, each is optional at
 # runtime, and each earns its place by being something nginx cannot do alone.
 ARG FANCYINDEX_VERSION=v0.6.0
+ARG FANCYINDEX_COMMIT=70311f239ec1e88ff79c669d126d08532ddb8554
 ARG CACHE_PURGE_VERSION=3.0.3
+ARG CACHE_PURGE_COMMIT=c8d93dea1e22331306f1e8315b7e7bed5b044ead
 ARG UPLOAD_PROGRESS_VERSION=v0.9.4
-# ngx_brotli publishes no releases, so this is a commit. Pinned rather than
-# tracking master: an unpinned dependency in a WAF-bearing gateway is a change
-# nobody reviewed arriving in a tag we already published.
+ARG UPLOAD_PROGRESS_COMMIT=463d60b5024d3870280d3a63b1568a2676e24a8c
+# ngx_brotli publishes no releases, so this is a commit alone. Pinned rather
+# than tracking master: an unpinned dependency in a WAF-bearing gateway is a
+# change nobody reviewed arriving in a tag we already published.
 #
 # **Both compression modules are worth knowing the state of**, since neither is
 # pristine and both were kept deliberately. ngx_brotli's last commit is October
@@ -172,25 +197,41 @@ RUN NGINX_RELEASE_KEYS="43387825DDB1BB97EC36BA5D007C8D7C15D87369 \
     tar -xzf "nginx-${NGINX_VERSION}.tar.gz"; \
     rm -rf "$GNUPGHOME" verify.status "nginx-${NGINX_VERSION}.tar.gz" "nginx-${NGINX_VERSION}.tar.gz.asc"
 
-RUN git clone --branch "${MODSECURITY_NGINX_VERSION}" --depth 1 \
-        https://github.com/owasp-modsecurity/ModSecurity-nginx.git \
-    && git clone --branch "${HEADERS_MORE_VERSION}" --depth 1 \
-        https://github.com/openresty/headers-more-nginx-module.git \
-    && git clone --branch "${GEOIP2_VERSION}" --depth 1 \
-        https://github.com/leev/ngx_http_geoip2_module.git \
-    && git clone --branch "${VTS_VERSION}" --depth 1 \
-        https://github.com/vozlt/nginx-module-vts.git \
-    && git clone --branch "${ZSTD_MODULE_VERSION}" --depth 1 \
-        https://github.com/tokers/zstd-nginx-module.git \
-    && git clone --branch "${FANCYINDEX_VERSION}" --depth 1 \
-        https://github.com/aperezdc/ngx-fancyindex.git \
-    && git clone --branch "${CACHE_PURGE_VERSION}" --depth 1 \
-        https://github.com/nginx-modules/ngx_cache_purge.git \
-    && git clone --branch "${UPLOAD_PROGRESS_VERSION}" --depth 1 \
-        https://github.com/masterzen/nginx-upload-progress-module.git \
-    && git clone --recursive https://github.com/google/ngx_brotli.git \
-    && git -C ngx_brotli checkout "${NGX_BROTLI_COMMIT}" \
-    && git -C ngx_brotli submodule update --init --recursive
+# The modules, each fetched as one commit and checked: HEAD must be the pinned
+# commit, and the pinned tag must still point at it upstream.
+RUN fetch() { \
+        url="$1" dir="$2" tag="$3" commit="$4"; \
+        git init -q "$dir"; \
+        git -C "$dir" remote add origin "$url"; \
+        git -C "$dir" fetch -q --depth 1 origin "$commit"; \
+        git -C "$dir" checkout -q --detach FETCH_HEAD; \
+        test "$(git -C "$dir" rev-parse HEAD)" = "$commit"; \
+        if [ -n "$tag" ]; then \
+            tagged="$(git -C "$dir" ls-remote origin "refs/tags/$tag" "refs/tags/$tag^{}" | sort -k2 | tail -n1 | cut -f1)"; \
+            if [ "$tagged" != "$commit" ]; then \
+                echo "$url: tag $tag is ${tagged:-missing}, not the pinned $commit" >&2; return 1; \
+            fi; \
+        fi; \
+    }; \
+    set -e; \
+    fetch https://github.com/owasp-modsecurity/ModSecurity-nginx.git ModSecurity-nginx \
+        "${MODSECURITY_NGINX_VERSION}" "${MODSECURITY_NGINX_COMMIT}"; \
+    fetch https://github.com/openresty/headers-more-nginx-module.git headers-more-nginx-module \
+        "${HEADERS_MORE_VERSION}" "${HEADERS_MORE_COMMIT}"; \
+    fetch https://github.com/leev/ngx_http_geoip2_module.git ngx_http_geoip2_module \
+        "${GEOIP2_VERSION}" "${GEOIP2_COMMIT}"; \
+    fetch https://github.com/vozlt/nginx-module-vts.git nginx-module-vts \
+        "${VTS_VERSION}" "${VTS_COMMIT}"; \
+    fetch https://github.com/tokers/zstd-nginx-module.git zstd-nginx-module \
+        "${ZSTD_MODULE_VERSION}" "${ZSTD_MODULE_COMMIT}"; \
+    fetch https://github.com/aperezdc/ngx-fancyindex.git ngx-fancyindex \
+        "${FANCYINDEX_VERSION}" "${FANCYINDEX_COMMIT}"; \
+    fetch https://github.com/nginx-modules/ngx_cache_purge.git ngx_cache_purge \
+        "${CACHE_PURGE_VERSION}" "${CACHE_PURGE_COMMIT}"; \
+    fetch https://github.com/masterzen/nginx-upload-progress-module.git nginx-upload-progress-module \
+        "${UPLOAD_PROGRESS_VERSION}" "${UPLOAD_PROGRESS_COMMIT}"; \
+    fetch https://github.com/google/ngx_brotli.git ngx_brotli "" "${NGX_BROTLI_COMMIT}"; \
+    git -C ngx_brotli submodule update -q --init --recursive
 
 # Brotli's bundled libbrotli, built before nginx configures against it.
 #
