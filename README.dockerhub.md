@@ -68,7 +68,7 @@ as they are there. Drop-in replacement for `nginx:<version>` until you use one.
 
 Already in official nginx and therefore **not** duplicated here: rate limiting (`limit_req`),
 connection limiting, `real_ip`, HTTP/2, HTTP/3, gzip, `sub_filter`, `secure_link`,
-`auth_request`, `map`, `geo`.
+`auth_request`, `map`, `geo`, `mp4`.
 
 ## ModSecurity
 

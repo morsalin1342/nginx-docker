@@ -84,7 +84,7 @@ would be duplication:
 
 `limit_req` (rate limiting) · `limit_conn` · `real_ip` · HTTP/2 · HTTP/3 · gzip ·
 `gzip_static` · `sub_filter` · `secure_link` · `auth_request` · `map` · `geo` · `slice` ·
-`stream` with `ssl_preread`
+`mp4` · `stream` with `ssl_preread`
 
 **Mail** is complete already: `--with-mail` and `--with-mail_ssl_module` are compiled into the
 official image, which is all eight of `mail_core`, `mail_auth_http`, `mail_proxy`,
@@ -98,10 +98,14 @@ official image, which is all eight of `mail_core`, `mail_auth_http`, `mail_proxy
 And these cannot be added to any open-source build, being NGINX Plus only — verified against
 nginx.org, each of which documents itself as *"part of our commercial subscription"*:
 
-- **HTTP:** `api`, `auth_jwt`, `f4f`, `hls`, `keyval`, `mp4_*`, `oidc`, `session_log`,
-  `status`, `upstream_conf`
+- **HTTP:** `api`, `auth_jwt`, `f4f`, `hls`, `keyval`, `oidc`, `session_log`, `status`,
+  `upstream_conf`
 - **Stream:** `keyval`, `mqtt_preread`, `mqtt_filter`, `num_map`, `proxy_protocol_vendor`,
   `upstream_hc`, `zone_sync`
+
+`mp4` itself is open source and in the official image (`--with-http_mp4_module` in `nginx -V`);
+only two of its directives, `mp4_limit_rate` and `mp4_limit_rate_after`, are part of the
+commercial subscription.
 
 Two of those shape what open-source nginx can do and are worth knowing before you plan around
 them: **`stream_zone_sync`** replicates shared zones between instances, so multi-node rate

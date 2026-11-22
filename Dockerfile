@@ -45,8 +45,8 @@
 # # What is deliberately absent
 #
 # Rate limiting, connection limiting, real_ip, HTTP/2, HTTP/3, gzip, sub_filter,
-# secure_link, auth_request, map and geo are **already in the official image** —
-# verified against `nginx -V`. Nothing here duplicates them.
+# secure_link, auth_request, map, geo and mp4 are **already in the official
+# image** — verified against `nginx -V`. Nothing here duplicates them.
 #
 # Note also that several modules in nginx's documentation index are NGINX Plus
 # only and cannot be added to an open-source build at all: `api`, `auth_jwt`,
