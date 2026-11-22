@@ -1,0 +1,6 @@
+# Only what the Dockerfile copies from the build context is sent to the builder:
+# modsecurity/main.conf. Everything else (the git history, the docs, the
+# workflows, scripts/) stays out, so it can neither bloat the context nor end up
+# in a layer by accident.
+*
+!modsecurity/

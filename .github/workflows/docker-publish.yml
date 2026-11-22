@@ -5,6 +5,7 @@ on:
     branches: [ "master" ]
     paths:
       - 'Dockerfile'
+      - '.dockerignore'
       # modsecurity/main.conf is copied into the image.
       - 'modsecurity/**'
       # A waiver changes what the scan lets through, so it runs the scan again.
@@ -17,6 +18,7 @@ on:
   pull_request:
     paths:
       - 'Dockerfile'
+      - '.dockerignore'
       - 'modsecurity/**'
       - '.trivyignore'
       - '.github/workflows/docker-publish.yml'
