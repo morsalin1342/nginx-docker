@@ -170,7 +170,7 @@ Zstandard (BSD-3-Clause or GPL-2.0) libraries keep their own licences; the
 | [easydigital/caddy](https://hub.docker.com/r/easydigital/caddy) | Standalone Caddy with WAF, rate limiting & caching |
 | [easydigital/frankenphp](https://hub.docker.com/r/easydigital/frankenphp) | Caddy + PHP app server in one container |
 | [easydigital/php](https://hub.docker.com/r/easydigital/php) | Traditional PHP-FPM & CLI images |
-| [easydigital/apache](https://hub.docker.com/r/easydigital/apache) | Apache as a static server or php-fpm application server, no PHP inside |
+| [easydigital/apache](https://hub.docker.com/r/easydigital/apache) | Apache httpd as a static server or php-fpm application server, no PHP inside |
 | [easydigital/adminer](https://hub.docker.com/r/easydigital/adminer) | Adminer database tool: the official image plus Alpine security updates |
 | [morsalin1342/nginx](https://hub.docker.com/r/morsalin1342/nginx) | Same image, personal namespace |
 <!-- END GENERATED: related -->

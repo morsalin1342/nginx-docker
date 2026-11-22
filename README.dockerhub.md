@@ -161,7 +161,7 @@ Zstandard (BSD-3-Clause or GPL-2.0) libraries keep their own licences; the
 | [morsalin1342/caddy](https://hub.docker.com/r/morsalin1342/caddy) | Standalone Caddy with WAF, rate limiting & caching |
 | [morsalin1342/frankenphp](https://hub.docker.com/r/morsalin1342/frankenphp) | Caddy + PHP app server in one container |
 | [morsalin1342/php](https://hub.docker.com/r/morsalin1342/php) | Traditional PHP-FPM & CLI images |
-| [morsalin1342/apache](https://hub.docker.com/r/morsalin1342/apache) | Apache as a static server or php-fpm application server, no PHP inside |
+| [morsalin1342/apache](https://hub.docker.com/r/morsalin1342/apache) | Apache httpd as a static server or php-fpm application server, no PHP inside |
 | [morsalin1342/adminer](https://hub.docker.com/r/morsalin1342/adminer) | Adminer database tool: the official image plus Alpine security updates |
 | [easydigital/nginx](https://hub.docker.com/r/easydigital/nginx) | Same image, organization namespace |
 <!-- END GENERATED: related -->
