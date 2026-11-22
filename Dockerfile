@@ -276,10 +276,15 @@ FROM nginx:${NGINX_VERSION}-${DEBIAN_RELEASE}
 ARG NGINX_VERSION
 ARG CRS_VERSION=v4.30.0
 
+# licenses is empty on purpose. The repository's own files are MIT, but the image
+# combines software under many licences (the README's Licence section names the main
+# ones; the SBOM each build keeps lists every package), and no single SPDX expression
+# has been derived for all of it. The base image sets no licences label today; the
+# empty value keeps it that way if one is added.
 LABEL org.opencontainers.image.title="nginx" \
       org.opencontainers.image.description="nginx with ModSecurity 3, Brotli, headers-more and GeoIP2 as dynamic modules" \
       org.opencontainers.image.source="https://github.com/morsalin1342/nginx-docker" \
-      org.opencontainers.image.licenses="MIT"
+      org.opencontainers.image.licenses=""
 
 # Runtime libraries the modules link against. The -dev packages stay in the
 # builder; only the shared objects are needed here. `acl` (setfacl, getfacl) lets
