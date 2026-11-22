@@ -455,7 +455,10 @@ RUN NGINX_PACKAGE_KEYS="573BFD6B3D8FBC641079A6ABABF5BD827BD9BF62 \
     apt-get purge -y --auto-remove gnupg; \
     rm -rf /var/lib/apt/lists/* /etc/apt/sources.list.d/nginx.list
 
-COPY --from=modsecurity /usr/local/modsecurity/lib/libmodsecurity.so* /usr/local/modsecurity/lib/
+# libmodsecurity once. The real file only (libmodsecurity.so.3.0.x): COPY
+# follows symlinks, so copying libmodsecurity.so* stored the same library three
+# times. ldconfig recreates the libmodsecurity.so.3 link the connector loads.
+COPY --from=modsecurity /usr/local/modsecurity/lib/libmodsecurity.so.*.*.* /usr/local/modsecurity/lib/
 COPY --from=modules /usr/src/nginx-${NGINX_VERSION}/objs/*.so /usr/lib/nginx/modules/
 COPY --from=modules /usr/src/built-modules.txt /tmp/built-modules.txt
 
