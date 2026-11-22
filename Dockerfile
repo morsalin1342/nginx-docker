@@ -121,8 +121,8 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ARG NGINX_VERSION
 ARG MODSECURITY_NGINX_VERSION=v1.0.4
 ARG MODSECURITY_NGINX_COMMIT=3f4b57df10ce43b1f1c722141f7621dc64838be8
-ARG HEADERS_MORE_VERSION=v0.40
-ARG HEADERS_MORE_COMMIT=0bf283ff92017acd616814b0e5153e0ccf93e2c9
+ARG HEADERS_MORE_VERSION=v0.42
+ARG HEADERS_MORE_COMMIT=e30b10e0bb1cfb042d76ba3a865410ff95d65660
 ARG GEOIP2_VERSION=3.4
 ARG GEOIP2_COMMIT=cbaa35461c62a99d2577e6bae3273492502d8769
 ARG VTS_VERSION=v0.2.7
@@ -133,8 +133,8 @@ ARG ZSTD_MODULE_COMMIT=6be764e2bed04f889af824eff2d4dd737ebdab5a
 # runtime, and each earns its place by being something nginx cannot do alone.
 ARG FANCYINDEX_VERSION=v0.6.0
 ARG FANCYINDEX_COMMIT=70311f239ec1e88ff79c669d126d08532ddb8554
-ARG CACHE_PURGE_VERSION=3.0.3
-ARG CACHE_PURGE_COMMIT=c8d93dea1e22331306f1e8315b7e7bed5b044ead
+ARG CACHE_PURGE_VERSION=3.0.4
+ARG CACHE_PURGE_COMMIT=a6da1352f52a8a02dd6828e88c39ed42fddcee96
 ARG UPLOAD_PROGRESS_VERSION=v0.9.4
 ARG UPLOAD_PROGRESS_COMMIT=463d60b5024d3870280d3a63b1568a2676e24a8c
 # ngx_brotli publishes no releases, so this is a commit alone. Pinned rather
@@ -142,14 +142,15 @@ ARG UPLOAD_PROGRESS_COMMIT=463d60b5024d3870280d3a63b1568a2676e24a8c
 # change nobody reviewed arriving in a tag we already published.
 #
 # **Both compression modules are worth knowing the state of**, since neither is
-# pristine and both were kept deliberately. ngx_brotli's last commit is October
-# 2023 and it has never cut a release; zstd-nginx-module last moved in June 2025
-# and its own README calls it "currently considered experimental". They are
-# carried because compression is the main reason anyone builds custom nginx and
-# gzip alone is a poor showing in 2026 — not because either is actively
-# developed. Both are pinned, both are off by default, and dropping either is a
-# two-line change.
-ARG NGX_BROTLI_COMMIT=a71f9312c2deb28875acc7bacfdd5695a111aa53
+# pristine and both were kept deliberately. ngx_brotli has never cut a release:
+# its last commit, in October 2026, moved the bundled Brotli library to v1.2.1,
+# and the one before that was October 2023. zstd-nginx-module last moved in
+# June 2025 and its own README calls it "currently considered experimental".
+# They are carried because compression is the main reason anyone builds custom
+# nginx and gzip alone is a poor showing in 2026 — not because either is
+# actively developed. Both are pinned, both are off by default, and dropping
+# either is a two-line change.
+ARG NGX_BROTLI_COMMIT=53e0fb55f250f48fe80c0ddbf6c0f7103cdbaae1
 
 # gnupg is for checking the nginx source signature below. Unpinned on purpose,
 # as in the stage above.

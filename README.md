@@ -55,9 +55,9 @@ the nginx binary it could have produced is discarded.
 | [ngx_brotli](https://github.com/google/ngx_brotli) | pinned commit | nginx has gzip and no Brotli |
 | [zstd-nginx-module](https://github.com/tokers/zstd-nginx-module) | 0.1.1 | likewise; negotiated alongside Brotli, not instead of it |
 | [VTS](https://github.com/vozlt/nginx-module-vts) | v0.2.7 | per-vhost metrics in Prometheus format; `stub_status` is seven global counters |
-| [headers-more](https://github.com/openresty/headers-more-nginx-module) | v0.40 | nginx cannot unset an arbitrary response header |
+| [headers-more](https://github.com/openresty/headers-more-nginx-module) | v0.42 | nginx cannot unset an arbitrary response header |
 | [GeoIP2](https://github.com/leev/ngx_http_geoip2_module) (http **and** stream) | 3.4 | nginx's own GeoIP module reads only the legacy databases MaxMind stopped publishing. **Bring your own `.mmdb`** — see below |
-| [cache-purge](https://github.com/nginx-modules/ngx_cache_purge) | 3.0.3 | invalidating a single `proxy_cache` entry; nginx open source can only expire the whole zone |
+| [cache-purge](https://github.com/nginx-modules/ngx_cache_purge) | 3.0.4 | invalidating a single `proxy_cache` entry; nginx open source can only expire the whole zone |
 | [fancyindex](https://github.com/aperezdc/ngx-fancyindex) | v0.6.0 | themed directory listings; `autoindex` output is unstyleable |
 | [upload-progress](https://github.com/masterzen/nginx-upload-progress-module) | v0.9.4 | upload progress polling |
 | [ngx_otel_module](https://github.com/nginxinc/nginx-otel) | 0.1.2 | OTLP/gRPC tracing — **from nginx's own package repo**, not built here |
