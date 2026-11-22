@@ -23,22 +23,28 @@ README lists what is NGINX Plus only and cannot be added to an open-source build
 
 ### Submit a Pull Request
 1. Fork the repo and create a feature branch
-2. Pin your module to a tag or commit — never a moving branch
-3. Add it to the `./configure` line in the modules stage
-4. Test locally:
+2. Pin your module to a release tag **and** the commit it points at (a `*_VERSION` and a
+   `*_COMMIT` ARG) — never a moving branch. The build fetches the commit and checks the tag
+   still points at it
+3. Add it to the `./configure` line in the modules stage, and its `.so` files to the
+   `load_module` list in the final stage. The build fails if a built `.so` is not in the list
+4. Add it to `scripts/check-upstream.sh`, so a newer release is reported
+5. Test locally:
    ```bash
    docker build -t test-nginx .
    docker run --rm test-nginx nginx -V
    docker run --rm test-nginx nginx -t
    ```
-5. Open a PR against `master` with a clear description
+6. Open a PR against `master` with a clear description
 
 ## Project Structure
 
 ```
 .
 ├── Dockerfile                 # Three stages: libmodsecurity, modules, final image
-├── .github/workflows/         # CI/CD pipeline
+├── modsecurity/main.conf      # The WAF configuration, shipped and loaded by nothing
+├── scripts/check-upstream.sh  # Compares every pin with the latest upstream release
+├── .github/workflows/         # CI/CD pipeline and the weekly upstream check
 ├── README.md                  # GitHub README
 ├── README.dockerhub.md        # Personal Docker Hub description
 └── README.dockerhub-org.md    # Org Docker Hub description
