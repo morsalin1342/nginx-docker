@@ -151,6 +151,9 @@ Each module is fetched as its pinned commit, and the pinned tag must still point
 commit. The zstd and CRS tarballs must match their pinned SHA-256. Any mismatch fails the
 build.
 
+`scripts/check-upstream.sh` compares every pin with the latest upstream release and exits 1
+listing what is behind; `.github/workflows/upstream-check.yml` runs it weekly.
+
 The final stage runs `nginx -t` with every module loaded **and then starts nginx and serves a
 request**, so a module built against a mismatched nginx fails **the build** rather than a
 customer's server at start time.
