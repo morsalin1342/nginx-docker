@@ -1,8 +1,9 @@
-# Production-Ready nginx Docker Image with Essential Modules
+# nginx Docker Image with ModSecurity, Brotli, Zstandard and GeoIP2 Modules
 
 [![Docker Pulls](https://img.shields.io/docker/pulls/morsalin1342/nginx.svg?style=for-the-badge&logo=docker)](https://hub.docker.com/r/morsalin1342/nginx)
 [![GitHub Stars](https://img.shields.io/github/stars/morsalin1342/nginx-docker?style=for-the-badge&logo=github)](https://github.com/morsalin1342/nginx-docker)
 [![License](https://img.shields.io/github/license/morsalin1342/nginx-docker?style=for-the-badge)](https://github.com/morsalin1342/nginx-docker/blob/master/LICENSE)
+[![Docker Publish](https://github.com/morsalin1342/nginx-docker/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/morsalin1342/nginx-docker/actions/workflows/docker-publish.yml)
 
 Official nginx plus the modules it does not ship — **ModSecurity 3**, **Brotli**,
 **Zstandard**, **headers-more**, **GeoIP2**, **VTS** and **OpenTelemetry** — built as
@@ -11,6 +12,8 @@ dynamic modules.
 ```bash
 docker pull morsalin1342/nginx:latest
 ```
+
+**Platform:** linux/amd64 only. `morsalin1342/nginx` and `easydigital/nginx` are the same image, pushed by the same build with the same digest; pull whichever you prefer.
 
 ## ✨ Why This Image?
 
@@ -242,11 +245,24 @@ A: Fork the repo, pin it to a tag or commit, and add an `--add-dynamic-module` l
 modules stage. See CONTRIBUTING.md — and check the "Deliberately absent" list first, because
 nginx may already do it.
 
-## License
+## Licence
 
-MIT for this repository's build files. The software it packages keeps its own licences: nginx
-(BSD-2-Clause), ModSecurity (Apache-2.0), OWASP CRS (Apache-2.0), Brotli (MIT), headers-more
-(BSD-2-Clause), ngx_http_geoip2_module (BSD-2-Clause).
+The files in this repository are MIT ([LICENSE](LICENSE)). That licence covers the build files,
+not the software in the image, which keeps its own licences. The main components:
+
+| Component | Licence |
+|---|---|
+| nginx | BSD-2-Clause |
+| ModSecurity 3 and ModSecurity-nginx | Apache-2.0 |
+| OWASP Core Rule Set | Apache-2.0 |
+| ngx_otel_module | Apache-2.0 |
+| ngx_brotli | BSD-2-Clause (the Brotli library it builds in is MIT) |
+| zstd-nginx-module | BSD-2-Clause (the Zstandard library linked into it is BSD-3-Clause or GPL-2.0, at your choice) |
+| headers-more, GeoIP2, VTS, cache-purge, fancyindex, upload-progress | BSD-2-Clause |
+| Debian packages from the base image and `apt-get` | their own licences |
+
+Each build also writes an SPDX SBOM, kept as an artifact of its workflow run, which lists each
+package with the licence it declares.
 
 ---
 

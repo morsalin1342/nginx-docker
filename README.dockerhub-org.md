@@ -1,4 +1,4 @@
-# nginx — Enterprise Web Server
+# nginx — Official nginx with ModSecurity, Brotli, Zstandard and GeoIP2 Modules
 
 **Published by [easydigital](https://hub.docker.com/u/easydigital)** · [GitHub](https://github.com/morsalin1342/nginx-docker)
 
@@ -12,6 +12,8 @@ Official nginx plus **ModSecurity 3**, **Brotli**, **Zstandard**, **headers-more
 separately and loaded into the stock binary, so nginx's own security updates arrive on
 nginx's schedule, not this repository's.
 
+**Platform:** linux/amd64 only. `morsalin1342/nginx` and `easydigital/nginx` are the same image, pushed by the same build with the same digest; pull whichever you prefer.
+
 ## ✨ Why This Image?
 
 | Feature | Official image | This image |
@@ -24,12 +26,6 @@ nginx's schedule, not this repository's.
 | **Single-entry cache purge** | Zone-wide expiry only | ✅ cache-purge |
 | **OpenTelemetry** | ❌ | ✅ From nginx's own package repo |
 | **nginx itself rebuilt?** | — | ❌ Stock binary, modules load dynamically |
-
-## Why the easydigital Registry?
-
-- **Namespace isolation** — keep team pulls under the organization account
-- **Same image digest** — bit-for-bit identical to `morsalin1342/nginx`
-- **CI/CD friendly** — predictable tags for automated pipelines
 
 ## Production Deployment
 
@@ -136,6 +132,12 @@ A: `load_module` is only valid in the main context. Keep `include /etc/nginx/mod
 
 **Q: GeoIP2 returns my default for everything.**
 A: No database ships with the image — MaxMind requires an account. Mount a `.mmdb` and point `geoip2` at it.
+
+## Licence
+
+The repository's build files are MIT. nginx (BSD-2-Clause), ModSecurity and the OWASP CRS
+(Apache-2.0) and the other modules keep their own licences; the
+[Licence section](https://github.com/morsalin1342/nginx-docker#licence) lists them.
 
 ---
 
