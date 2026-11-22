@@ -126,10 +126,11 @@ ARG UPLOAD_PROGRESS_VERSION=v0.9.4
 # two-line change.
 ARG NGX_BROTLI_COMMIT=a71f9312c2deb28875acc7bacfdd5695a111aa53
 
-# Unpinned on purpose, as in the stage above.
+# gnupg is for checking the nginx source signature below. Unpinned on purpose,
+# as in the stage above.
 # hadolint ignore=DL3008
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential ca-certificates cmake curl git libtool pkg-config \
+        build-essential ca-certificates cmake curl git gnupg libtool pkg-config \
         libcurl4-openssl-dev libgeoip-dev liblmdb-dev libmaxminddb-dev \
         libpcre2-dev libssl-dev libxml2-dev libxslt1-dev libyajl-dev libzstd-dev \
         zlib1g-dev \
@@ -138,8 +139,40 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=modsecurity /usr/local/modsecurity /usr/local/modsecurity
 WORKDIR /usr/src
 
-RUN curl -fsSL "https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz" | tar -xz \
-    && git clone --branch "${MODSECURITY_NGINX_VERSION}" --depth 1 \
+# The nginx source, verified against nginx's own signature before it is used.
+#
+# nginx signs every release tarball with a developer's key, and nginx.org
+# publishes those keys at /en/pgp_keys.html. The keys are fetched from there,
+# but trust comes from the fingerprints written below, not from the download:
+# the signature must be good **and** made by one of these keys, or the build
+# stops. The keys are Roman Arutyunyan, Sergey Kandaurov, Sergey Budnevitch,
+# Konstantin Pavlov and Sai Krishna Kumar Reddy Yadamakanti, in that order.
+RUN NGINX_RELEASE_KEYS="43387825DDB1BB97EC36BA5D007C8D7C15D87369 \
+        D6786CE303D9A9022998DC6CC8464D549AF75C0A \
+        7338973069ED3F443F4D37DFA64FD5B17ADB39A8 \
+        13C82A63B603576156E30A4EA0EA981B66B0D967 \
+        AC50DD4E7CD5D51FD00D1F4C4DB15B66AA75322B"; \
+    set -e; \
+    GNUPGHOME="$(mktemp -d)"; export GNUPGHOME; \
+    for key in arut pluknet sb thresh sai; do \
+        curl -fsSL "https://nginx.org/keys/${key}.key" | gpg --batch --quiet --import; \
+    done; \
+    curl -fsSLO "https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz"; \
+    curl -fsSLO "https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz.asc"; \
+    gpg --batch --status-fd 1 --verify "nginx-${NGINX_VERSION}.tar.gz.asc" \
+        "nginx-${NGINX_VERSION}.tar.gz" > verify.status; \
+    signer="$(awk '$2 == "VALIDSIG" { print $NF }' verify.status)"; \
+    trusted=no; \
+    for fpr in ${NGINX_RELEASE_KEYS}; do [ "$fpr" = "$signer" ] && trusted=yes; done; \
+    if [ "$trusted" != yes ]; then \
+        echo "nginx-${NGINX_VERSION}.tar.gz is not signed by a pinned nginx key (${signer:-no valid signature})" >&2; \
+        exit 1; \
+    fi; \
+    echo "nginx-${NGINX_VERSION}.tar.gz: good signature from ${signer}"; \
+    tar -xzf "nginx-${NGINX_VERSION}.tar.gz"; \
+    rm -rf "$GNUPGHOME" verify.status "nginx-${NGINX_VERSION}.tar.gz" "nginx-${NGINX_VERSION}.tar.gz.asc"
+
+RUN git clone --branch "${MODSECURITY_NGINX_VERSION}" --depth 1 \
         https://github.com/owasp-modsecurity/ModSecurity-nginx.git \
     && git clone --branch "${HEADERS_MORE_VERSION}" --depth 1 \
         https://github.com/openresty/headers-more-nginx-module.git \
@@ -201,11 +234,16 @@ RUN cmake -S . -B out \
 # That typo is presumably why every packager of this module links it statically.
 #
 # So: our own libzstd, PIC, and the static path it already prefers.
+#
+# The tarball is checked against the SHA-256 that zstd publishes beside it as
+# the release asset zstd-<version>.tar.gz.sha256.
 ARG ZSTD_VERSION=1.5.7
+ARG ZSTD_SHA256=eb33e51f49a15e023950cd7825ca74a4a2b43db8354825ac24fc1b7ee09e6fa3
 
 WORKDIR /usr/src
-RUN curl -fsSL "https://github.com/facebook/zstd/releases/download/v${ZSTD_VERSION}/zstd-${ZSTD_VERSION}.tar.gz" \
-        | tar -xz \
+RUN curl -fsSLO "https://github.com/facebook/zstd/releases/download/v${ZSTD_VERSION}/zstd-${ZSTD_VERSION}.tar.gz" \
+    && echo "${ZSTD_SHA256}  zstd-${ZSTD_VERSION}.tar.gz" | sha256sum -c - \
+    && tar -xzf "zstd-${ZSTD_VERSION}.tar.gz" \
     && make -C "zstd-${ZSTD_VERSION}/lib" -j"$(nproc)" libzstd.a CFLAGS="-O3 -fPIC" \
     && mkdir -p /usr/local/zstd/lib /usr/local/zstd/include \
     && cp "zstd-${ZSTD_VERSION}/lib/libzstd.a" /usr/local/zstd/lib/ \
@@ -288,6 +326,9 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 ARG NGINX_VERSION
 ARG CRS_VERSION=v4.30.0
+# The SHA-256 of coreruleset-<version>-minimal.tar.gz, as GitHub records it for
+# that asset of the CRS release.
+ARG CRS_SHA256=3d678a41fd5aade34760127fef5dd64fd7a77848913fc0f70dde0cf467c94427
 
 # licenses is empty on purpose. The repository's own files are MIT, but the image
 # combines software under many licences (the README's Licence section names the main
@@ -330,15 +371,29 @@ RUN apt-get update && apt-get upgrade -y --no-install-recommends \
 # mode worth having.
 ARG DEBIAN_RELEASE
 ARG OTEL_MODULE_VERSION=0.1.2
-# The signing key is verified, not trusted blindly: apt checks the repository
-# signature against it. gnupg is installed only to dearmor the key and is
-# removed again, so it is not part of the published image.
-# hadolint ignore=DL3008
-RUN set -eux; \
+# The repository signing key is checked by fingerprint, not trusted because it
+# downloaded. nginx_signing.key holds nginx's three package signing keys; the
+# fingerprints below are the ones nginx.org lists and the official nginx image
+# pins. Only those keys are exported into the keyring apt uses, and a key file
+# missing any of them stops the build. apt then checks the repository's
+# signature against that keyring. gnupg is installed only for this and is
+# removed again, so it is not part of the published image. The key list is
+# split on purpose (SC2086).
+# hadolint ignore=DL3008,SC2086
+RUN NGINX_PACKAGE_KEYS="573BFD6B3D8FBC641079A6ABABF5BD827BD9BF62 \
+        8540A6F18833A80E9C1653A42FD21310B49F6B46 \
+        9E9BE90EACBCDE69FE9B204CBCDCD8A38D88A2B3"; \
+    set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends gnupg; \
-    curl -fsSL https://nginx.org/keys/nginx_signing.key \
-        | gpg --dearmor > /usr/share/keyrings/nginx-archive-keyring.gpg; \
+    GNUPGHOME="$(mktemp -d)"; export GNUPGHOME; \
+    curl -fsSL https://nginx.org/keys/nginx_signing.key | gpg --batch --quiet --import; \
+    for fpr in ${NGINX_PACKAGE_KEYS}; do \
+        gpg --batch --list-keys --with-colons "$fpr" | grep -q "^fpr:::::::::${fpr}:" \
+            || { echo "nginx_signing.key does not contain the pinned key ${fpr}" >&2; exit 1; }; \
+    done; \
+    gpg --batch --export ${NGINX_PACKAGE_KEYS} > /usr/share/keyrings/nginx-archive-keyring.gpg; \
+    rm -rf "$GNUPGHOME"; \
     printf 'deb [signed-by=/usr/share/keyrings/nginx-archive-keyring.gpg] %s %s nginx\n' \
         'https://nginx.org/packages/debian' "${DEBIAN_RELEASE}" \
         > /etc/apt/sources.list.d/nginx.list; \
@@ -361,11 +416,15 @@ RUN ldconfig /usr/local/modsecurity/lib
 # site-specific and not something upstream ships. Turning it on, and choosing
 # detection or blocking, belongs to whoever runs the server.
 #
-# To use it: load the module, point modsecurity_rules_file at a file that
-# includes crs-setup.conf and rules/*.conf, and set `modsecurity on;`.
+# The release's "minimal" tarball: the rules, crs-setup.conf.example, the plugin
+# placeholders and the docs, without the regression tests and the regex-assembly
+# sources, which are for developing CRS rather than running it.
 RUN mkdir -p /etc/nginx/modsecurity \
-    && curl -fsSL "https://github.com/coreruleset/coreruleset/archive/refs/tags/${CRS_VERSION}.tar.gz" \
-        | tar -xz -C /etc/nginx/modsecurity --strip-components=1 \
+    && curl -fsSL -o /tmp/crs.tar.gz \
+        "https://github.com/coreruleset/coreruleset/releases/download/${CRS_VERSION}/coreruleset-${CRS_VERSION#v}-minimal.tar.gz" \
+    && echo "${CRS_SHA256}  /tmp/crs.tar.gz" | sha256sum -c - \
+    && tar -xzf /tmp/crs.tar.gz -C /etc/nginx/modsecurity --strip-components=1 \
+    && rm /tmp/crs.tar.gz \
     && cp /etc/nginx/modsecurity/crs-setup.conf.example /etc/nginx/modsecurity/crs-setup.conf
 
 # Load the modules, and prove they load, before the image is published.
