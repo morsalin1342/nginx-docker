@@ -81,23 +81,41 @@ connection limiting, `real_ip`, HTTP/2, HTTP/3, gzip, `sub_filter`, `secure_link
 
 ## ModSecurity
 
-The OWASP Core Rule Set ships at `/etc/nginx/modsecurity/` and **nothing loads it.** That is
-deliberate: CRS in blocking mode has a real false-positive cost against application admin
-panels, and the exclusions are site-specific. Enabling it, and choosing detection or blocking,
-is yours.
+The OWASP Core Rule Set, ModSecurity's `modsecurity.conf` and a `main.conf` that loads them ship
+at `/etc/nginx/modsecurity/`, and **nothing loads them.** That is deliberate: CRS in blocking
+mode has a real false-positive cost against application admin panels, and the exclusions are
+site-specific. Enabling it, and choosing detection or blocking, is yours.
 
 ```nginx
-# /etc/nginx/nginx.conf
-load_module modules/ngx_http_modsecurity_module.so;   # already loaded by default
-
 http {
     modsecurity on;
     modsecurity_rules_file /etc/nginx/modsecurity/main.conf;
 }
 ```
 
-Where `main.conf` includes `modsecurity.conf`, `crs-setup.conf` and `rules/*.conf`. Start in
-`DetectionOnly` and read your logs before blocking anything.
+`main.conf` includes `modsecurity.conf` (ModSecurity's `modsecurity.conf-recommended`, copied
+unchanged from the v3.0.17 source the library was built from), then `crs-setup.conf`, then the
+CRS rules, with `SecRuleEngine DetectionOnly`: matches are written to the audit log, nothing is
+blocked.
+`modsecurity.conf` keeps ModSecurity's rules `200002` and `200003`, which reject request bodies
+that fail to parse or break strict multipart parsing; CRS cannot inspect those bodies otherwise.
+The audit log is `/var/log/modsec_audit.log` inside the container, as
+`modsecurity.conf` sets it; it records requests that matched a rule or got a 5xx or a 4xx other
+than 404.
+
+Read your logs before blocking anything. To block, add one line **before**
+`modsecurity_rules_file`, in the same block:
+
+```nginx
+    modsecurity on;
+    modsecurity_rules 'SecRuleEngine On';
+    modsecurity_rules_file /etc/nginx/modsecurity/main.conf;
+```
+
+Before, not after: when one block sets `SecRuleEngine` twice, the connector keeps the first
+value it loads, so a line after `main.conf` leaves it in `DetectionOnly`.
+
+To change anything else, mount your own `main.conf` (or `crs-setup.conf`) over the shipped one.
 
 `modsecurity` defaults to **off** in the connector itself, so the module being loaded changes
 nothing until you say otherwise.
@@ -120,8 +138,9 @@ docker run --rm easydigital/nginx:latest nginx -V
 docker run --rm easydigital/nginx:latest nginx -t
 ```
 
-Every published image runs `nginx -t` with every module loaded at build time, so a module
-built against a mismatched nginx fails the build rather than a running server.
+Every published image runs `nginx -t` with every module loaded at build time, checks the WAF
+configuration in a throwaway copy, and starts nginx and serves a request, so a module built
+against a mismatched nginx fails the build rather than a running server.
 
 ## ❓ FAQ
 

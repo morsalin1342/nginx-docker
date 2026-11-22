@@ -62,7 +62,7 @@ the nginx binary it could have produced is discarded.
 | [fancyindex](https://github.com/aperezdc/ngx-fancyindex) | v0.6.0 | themed directory listings; `autoindex` output is unstyleable |
 | [upload-progress](https://github.com/masterzen/nginx-upload-progress-module) | v0.9.4 | upload progress polling |
 | [ngx_otel_module](https://github.com/nginxinc/nginx-otel) | 0.1.2 | OTLP/gRPC tracing — **from nginx's own package repo**, not built here |
-| [OWASP CRS](https://github.com/coreruleset/coreruleset) | v4.30.0 | shipped, **not loaded** |
+| [OWASP CRS](https://github.com/coreruleset/coreruleset) | v4.30.0 | shipped with ModSecurity's `modsecurity.conf` and a `main.conf`, **not loaded** |
 
 That is ten modules in thirteen `.so` files: Brotli, Zstandard and GeoIP2 each build two
 (`ngx_http_brotli_filter_module` and `ngx_http_brotli_static_module`,
@@ -133,10 +133,11 @@ This image's modules are loaded and every one of them does nothing until configu
 official image's own dynamic modules stay unloaded, as they are there. Until you write a
 directive, this is a drop-in replacement for `nginx:<version>`.
 
-ModSecurity in particular stays off. The Core Rule Set ships at `/etc/nginx/modsecurity/` and
-nothing includes it — CRS in blocking mode has a real false-positive cost against application
-admin panels, and the exclusions for that are site-specific. Start in `DetectionOnly`, read
-your logs, then decide.
+ModSecurity in particular stays off. The Core Rule Set, ModSecurity's `modsecurity.conf` and a
+`main.conf` that loads both ship at `/etc/nginx/modsecurity/`, and nothing includes them — CRS
+in blocking mode has a real false-positive cost against application admin panels, and the
+exclusions for that are site-specific. `main.conf` starts in `DetectionOnly`: read your logs,
+then decide. See the FAQ for how to turn it on.
 
 ## Building Locally
 
@@ -233,16 +234,32 @@ for that job.
 ## ❓ FAQ
 
 **Q: How do I turn the WAF on?**
-A: Load the module (already loaded), point `modsecurity_rules_file` at a file that includes
-`crs-setup.conf` and `rules/*.conf`, then set `modsecurity on;`. Start in `DetectionOnly`,
-read your logs, and only then switch to blocking — CRS has a real false-positive cost against
-application admin panels, WordPress's `/wp-admin` in particular.
+A: The module is already loaded. Add two lines to the `http`, `server` or `location` block
+you want protected:
+```nginx
+modsecurity on;
+modsecurity_rules_file /etc/nginx/modsecurity/main.conf;
+```
+`main.conf` includes ModSecurity's `modsecurity.conf` (its `modsecurity.conf-recommended`,
+copied unchanged from the v3.0.17 source the library was built from), then `crs-setup.conf`,
+then the CRS rules, with `SecRuleEngine DetectionOnly`: matches are written to the audit log,
+and nothing is blocked. `modsecurity.conf` keeps ModSecurity's rules `200002` and `200003`,
+which reject request bodies that fail to parse or break strict multipart parsing; CRS cannot
+inspect those bodies otherwise. The audit log is `/var/log/modsec_audit.log` inside the
+container, as `modsecurity.conf` sets it; it records requests that matched a rule or got a 5xx
+or a 4xx other than 404.
 
-The image ships the CRS files but not ModSecurity's own `modsecurity.conf`. Base yours on
-[`modsecurity.conf-recommended`](https://github.com/owasp-modsecurity/ModSecurity/blob/v3.0.17/modsecurity.conf-recommended)
-from the same ModSecurity release (v3.0.17), and keep its rules `200002` and `200003`: they
-reject request bodies that fail to parse or break strict multipart parsing, which CRS rules
-otherwise cannot inspect.
+Read your logs, and only then switch to blocking — CRS has a real false-positive cost against
+application admin panels, WordPress's `/wp-admin` in particular. To block, add one more line
+**before** `modsecurity_rules_file`, in the same block:
+```nginx
+modsecurity on;
+modsecurity_rules 'SecRuleEngine On';
+modsecurity_rules_file /etc/nginx/modsecurity/main.conf;
+```
+Before, not after: when one block sets `SecRuleEngine` twice, the connector keeps the first
+value it loads, so a line after `main.conf` leaves it in `DetectionOnly`.
+To change anything else, mount your own `main.conf` (or `crs-setup.conf`) over the shipped one.
 
 **Q: I replaced `/etc/nginx/nginx.conf` and all the modules vanished. Why?**
 A: `load_module` is only valid in nginx's main context, so it cannot live in `conf.d/`. The

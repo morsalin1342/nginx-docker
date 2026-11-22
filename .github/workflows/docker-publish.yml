@@ -5,6 +5,8 @@ on:
     branches: [ "master" ]
     paths:
       - 'Dockerfile'
+      # modsecurity/main.conf is copied into the image.
+      - 'modsecurity/**'
       # A waiver changes what the scan lets through, so it runs the scan again.
       - '.trivyignore'
       - 'README.md'
@@ -15,6 +17,7 @@ on:
   pull_request:
     paths:
       - 'Dockerfile'
+      - 'modsecurity/**'
       - '.trivyignore'
       - '.github/workflows/docker-publish.yml'
   # Weekly rebuild, so Debian security updates and a moved base image reach the

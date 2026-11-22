@@ -25,8 +25,8 @@ We aim to respond within 48 hours and publish a fix as soon as possible.
 
 ## A note on the WAF
 
-ModSecurity and the OWASP Core Rule Set ship in this image but **nothing loads them** —
-see the README. An image running with default configuration is therefore not protected by
+ModSecurity, its `modsecurity.conf`, the OWASP Core Rule Set and a `main.conf` that loads them
+ship in this image but **nothing loads them** — see the README. An image running with default configuration is therefore not protected by
 a WAF, and that is deliberate rather than a vulnerability. Enabling it, and choosing
 detection or blocking mode, belongs to whoever runs the server.
 

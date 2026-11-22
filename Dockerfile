@@ -16,7 +16,8 @@
 # # What is included, and why each
 #
 #   ModSecurity 3 + connector  the only maintained WAF engine for nginx. Ships
-#                              with the OWASP Core Rule Set, loaded by nothing.
+#                              with the OWASP Core Rule Set and a main.conf
+#                              that loads both, used by nothing until you opt in.
 #   ngx_brotli                 nginx has gzip built in and no Brotli at all.
 #   zstd                       Zstandard, beside Brotli rather than instead of
 #                              it. They do not compete: a client advertises what
@@ -479,6 +480,16 @@ RUN mkdir -p /etc/nginx/modsecurity \
     && rm /tmp/crs.tar.gz \
     && cp /etc/nginx/modsecurity/crs-setup.conf.example /etc/nginx/modsecurity/crs-setup.conf
 
+# ModSecurity's own configuration, from the ModSecurity source the library was
+# built from, and a main.conf that loads it, then the CRS setup, then the rules,
+# in DetectionOnly. Nothing includes main.conf: the WAF stays off until
+# `modsecurity on;` and `modsecurity_rules_file /etc/nginx/modsecurity/main.conf;`.
+# modsecurity.conf names unicode.mapping relative to itself, so the two sit
+# side by side.
+COPY --from=modsecurity /usr/src/ModSecurity/modsecurity.conf-recommended /etc/nginx/modsecurity/modsecurity.conf
+COPY --from=modsecurity /usr/src/ModSecurity/unicode.mapping /etc/nginx/modsecurity/unicode.mapping
+COPY modsecurity/main.conf /etc/nginx/modsecurity/main.conf
+
 # Load this image's modules, and prove they load, before the image is published.
 #
 # # Why an include rather than thirteen load_module lines in nginx.conf
@@ -540,6 +551,20 @@ RUN set -e; \
         | cat - /etc/nginx/nginx.conf > /tmp/nginx.conf; \
     mv /tmp/nginx.conf /etc/nginx/nginx.conf; \
     nginx -t
+
+# The WAF configuration is shipped and included by nothing, so the `nginx -t`
+# above never parses it. It is checked here, once, in a throwaway configuration
+# that turns it on: without this, main.conf, modsecurity.conf and every CRS rule
+# are files that could fail to load for a whole release with every build green.
+RUN printf '%s\n' \
+        'include /etc/nginx/modules-enabled/*.conf;' \
+        'events {}' \
+        'http {' \
+        '    modsecurity on;' \
+        '    modsecurity_rules_file /etc/nginx/modsecurity/main.conf;' \
+        '}' > /tmp/waf-check.conf \
+    && nginx -t -c /tmp/waf-check.conf \
+    && rm -f /tmp/waf-check.conf
 
 # Start nginx for real, and serve one request, before the image is published.
 #
