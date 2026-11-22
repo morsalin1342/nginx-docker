@@ -60,7 +60,7 @@ the nginx binary it could have produced is discarded.
 | [ngx_otel_module](https://github.com/nginxinc/nginx-otel) | 0.1.2 | OTLP/gRPC tracing — **from nginx's own package repo**, not built here |
 | [OWASP CRS](https://github.com/coreruleset/coreruleset) | v4.30.0 | shipped, **not loaded** |
 
-The image also contains `acl` (`setfacl`, `getfacl`), so an entrypoint can give a user access to a directory without changing its owner. The base is `nginx:1.30.5` on Debian trixie; the dynamic modules are compiled against exactly that nginx version.
+The image also contains `acl` (`setfacl`, `getfacl`), so an entrypoint can give a user access to a directory without changing its owner. The base is `nginx:1.30.7` on Debian trixie; the dynamic modules are compiled against exactly that nginx version.
 
 `ngx_brotli` publishes no releases, so it is pinned to a commit rather than a branch. An
 unpinned dependency in a WAF-bearing image is a change nobody reviewed arriving under a tag
