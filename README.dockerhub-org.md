@@ -156,7 +156,8 @@ A: No database ships with the image — MaxMind requires an account. Mount a `.m
 ## Licence
 
 The repository's build files are MIT. nginx (BSD-2-Clause), ModSecurity and the OWASP CRS
-(Apache-2.0) and the other modules keep their own licences; the
+(Apache-2.0), nginx-otel (Apache-2.0), the other modules (BSD-2-Clause) and the Brotli (MIT) and
+Zstandard (BSD-3-Clause or GPL-2.0) libraries keep their own licences; the
 [Licence section](https://github.com/morsalin1342/nginx-docker#licence) lists them.
 
 ---

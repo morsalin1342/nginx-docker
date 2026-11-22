@@ -303,11 +303,20 @@ not the software in the image, which keeps its own licences. The main components
 |---|---|
 | nginx | BSD-2-Clause |
 | ModSecurity 3 and ModSecurity-nginx | Apache-2.0 |
+| libinjection, built into libmodsecurity | BSD-3-Clause |
+| Mbed TLS, built into libmodsecurity | Apache-2.0 or GPL-2.0-or-later, at your choice |
 | OWASP Core Rule Set | Apache-2.0 |
-| ngx_otel_module | Apache-2.0 |
-| ngx_brotli | BSD-2-Clause (the Brotli library it builds in is MIT) |
-| zstd-nginx-module | BSD-2-Clause (the Zstandard library linked into it is BSD-3-Clause or GPL-2.0, at your choice) |
-| headers-more, GeoIP2, VTS, cache-purge, fancyindex, upload-progress | BSD-2-Clause |
+| ngx_otel_module (nginx-otel) | Apache-2.0 |
+| ngx_brotli | BSD-2-Clause |
+| Brotli library, built into ngx_brotli | MIT |
+| zstd-nginx-module | BSD-2-Clause |
+| Zstandard library, linked into zstd-nginx-module | BSD-3-Clause or GPL-2.0, at your choice |
+| headers-more | BSD-2-Clause |
+| GeoIP2 (ngx_http_geoip2_module) | BSD-2-Clause |
+| VTS (nginx-module-vts) | BSD-2-Clause |
+| cache-purge (ngx_cache_purge) | BSD-2-Clause |
+| fancyindex (ngx-fancyindex) | BSD-2-Clause |
+| upload-progress (nginx-upload-progress-module) | BSD-2-Clause |
 | Debian packages from the base image and `apt-get` | their own licences |
 
 Each build also writes an SPDX SBOM, kept as an artifact of its workflow run, which lists each
