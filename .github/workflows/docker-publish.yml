@@ -5,6 +5,8 @@ on:
     branches: [ "master" ]
     paths:
       - 'Dockerfile'
+      # A waiver changes what the scan lets through, so it runs the scan again.
+      - '.trivyignore'
       - 'README.md'
       - 'README.dockerhub.md'
       - 'README.dockerhub-org.md'
@@ -13,6 +15,7 @@ on:
   pull_request:
     paths:
       - 'Dockerfile'
+      - '.trivyignore'
       - '.github/workflows/docker-publish.yml'
   # Weekly rebuild, so Debian security updates and a moved base image reach the
   # published tags without waiting for a commit. It writes the same tags as a push.
@@ -65,14 +68,18 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # A fixable critical vulnerability fails the run before anything is pushed.
-      - name: Scan the image for fixable critical vulnerabilities
+      # A fixable critical or high vulnerability fails the run before anything is
+      # pushed. A finding with no fixed version cannot be fixed by a rebuild, so it
+      # does not fail the run. A waiver goes in .trivyignore, with a reason and an
+      # expiry date; the file says how.
+      - name: Scan the image for fixable critical and high vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: local/nginx:scan
           format: table
-          severity: CRITICAL
+          severity: CRITICAL,HIGH
           ignore-unfixed: true
+          trivyignores: .trivyignore
           exit-code: '1'
 
       - name: Write the SBOM
