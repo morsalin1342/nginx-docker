@@ -217,6 +217,12 @@ A: Load the module (already loaded), point `modsecurity_rules_file` at a file th
 read your logs, and only then switch to blocking — CRS has a real false-positive cost against
 application admin panels, WordPress's `/wp-admin` in particular.
 
+The image ships the CRS files but not ModSecurity's own `modsecurity.conf`. Base yours on
+[`modsecurity.conf-recommended`](https://github.com/owasp-modsecurity/ModSecurity/blob/v3.0.17/modsecurity.conf-recommended)
+from the same ModSecurity release (v3.0.17), and keep its rules `200002` and `200003`: they
+reject request bodies that fail to parse or break strict multipart parsing, which CRS rules
+otherwise cannot inspect.
+
 **Q: I replaced `/etc/nginx/nginx.conf` and all the modules vanished. Why?**
 A: `load_module` is only valid in nginx's main context, so it cannot live in `conf.d/`. The
 image adds one include line to `nginx.conf`; if you replace that file, keep it:

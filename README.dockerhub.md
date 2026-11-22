@@ -88,6 +88,12 @@ http {
 Where `main.conf` includes `modsecurity.conf`, `crs-setup.conf` and `rules/*.conf`. Start in
 `DetectionOnly` and read your logs before blocking anything.
 
+The image ships the CRS files but not ModSecurity's own `modsecurity.conf`. Base yours on
+[`modsecurity.conf-recommended`](https://github.com/owasp-modsecurity/ModSecurity/blob/v3.0.17/modsecurity.conf-recommended)
+from the same ModSecurity release (v3.0.17), and keep its rules `200002` and `200003`: they
+reject request bodies that fail to parse or break strict multipart parsing, which CRS rules
+otherwise cannot inspect.
+
 `modsecurity` defaults to **off** in the connector itself, so the module being loaded changes
 nothing until you say otherwise.
 
