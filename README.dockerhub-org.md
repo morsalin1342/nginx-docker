@@ -164,7 +164,7 @@ Zstandard (BSD-3-Clause or GPL-2.0) libraries keep their own licences; the
 
 ### 🔗 Related Images & Tools
 
-<!-- BEGIN GENERATED: related (from manifest/images.yaml in the morsalin1342/.github repository; do not edit by hand) -->
+<!-- BEGIN GENERATED: related (from catalog.yaml in the morsalin1342/docker-images repository; do not edit by hand) -->
 | Image / Tool | Description |
 |--------------|-------------|
 | [easydigital/caddy](https://hub.docker.com/r/easydigital/caddy) | Standalone Caddy with WAF, rate limiting & caching |
