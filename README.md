@@ -1,0 +1,349 @@
+# nginx Docker Image with ModSecurity, Brotli, Zstandard and GeoIP2 Modules
+
+[![Docker Pulls](https://img.shields.io/docker/pulls/morsalin1342/nginx.svg?style=for-the-badge&logo=docker)](https://hub.docker.com/r/morsalin1342/nginx)
+[![GitHub Stars](https://img.shields.io/github/stars/morsalin1342/nginx-docker?style=for-the-badge&logo=github)](https://github.com/morsalin1342/nginx-docker)
+[![License](https://img.shields.io/github/license/morsalin1342/nginx-docker?style=for-the-badge)](https://github.com/morsalin1342/nginx-docker/blob/main/LICENSE)
+[![Docker Publish](https://github.com/morsalin1342/nginx-docker/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/morsalin1342/nginx-docker/actions/workflows/docker-publish.yml)
+
+Official nginx plus the modules it does not ship — **ModSecurity 3**, **Brotli**,
+**Zstandard**, **headers-more**, **GeoIP2**, **VTS** and **OpenTelemetry** — built as
+dynamic modules.
+
+```bash
+docker pull morsalin1342/nginx:latest
+```
+
+**Platform:** linux/amd64 only. `morsalin1342/nginx` on Docker Hub and `ghcr.io/morsalin1342/nginx` on GitHub Container Registry are the same image, pushed by the same build with the same digest; pull whichever you prefer.
+
+## ✨ Why This Image?
+
+| Feature | Official `nginx` | This Image |
+|---------|-----------------|------------|
+| **Web application firewall** | ❌ | ✅ ModSecurity 3 + OWASP CRS (shipped, off by default) |
+| **Brotli compression** | ❌ | ✅ |
+| **Zstandard compression** | ❌ | ✅ negotiated alongside Brotli |
+| **Per-vhost metrics** | `stub_status` — 7 global counters | ✅ VTS, Prometheus format |
+| **GeoIP** | legacy databases only | ✅ GeoIP2 `.mmdb`, http **and** stream |
+| **Arbitrary header removal** | ❌ | ✅ headers-more |
+| **Single-entry cache purge** | zone-wide expiry only | ✅ cache-purge |
+| **OpenTelemetry tracing** | ❌ | ✅ from nginx's own package repo |
+| **nginx itself rebuilt?** | — | ❌ stock binary; modules load dynamically |
+
+## What this is, and what it is not
+
+The published image **is** the official `nginx` image. The modules are compiled in separate
+builder stages and copied in as `.so` files; nginx itself is never rebuilt.
+
+That is the whole design decision. Compiling nginx from source would put nginx's own security
+updates on this repository's release schedule instead of upstream's. Here a new nginx patch
+release is a one-line version bump and a rebuild of twelve shared objects. The thirteenth,
+`ngx_otel_module`, is installed from nginx's own package repository.
+
+It works because the official image is configured `--with-compat`, which nginx documents as
+enabling *"dynamic modules compatibility"*: a module built with a different `./configure` line
+still loads into the stock binary. Without it, the module signature would have to match the
+official image's entire configure invocation exactly, and any drift would be a runtime
+failure on a live server.
+
+The builder stage runs `make modules`, not `make` — only the `.so` files are compiled, and
+the nginx binary it could have produced is discarded.
+
+## Included
+
+| Module | Version | Why it is not already in nginx |
+|---|---|---|
+| [ModSecurity 3](https://github.com/owasp-modsecurity/ModSecurity) + [connector](https://github.com/owasp-modsecurity/ModSecurity-nginx) | v3.0.17 / v1.0.4 | nginx ships no WAF |
+| [ngx_brotli](https://github.com/google/ngx_brotli) | pinned commit | nginx has gzip and no Brotli |
+| [zstd-nginx-module](https://github.com/tokers/zstd-nginx-module) | 0.1.1 | likewise; negotiated alongside Brotli, not instead of it |
+| [VTS](https://github.com/vozlt/nginx-module-vts) | v0.2.7 | per-vhost metrics in Prometheus format; `stub_status` is seven global counters |
+| [headers-more](https://github.com/openresty/headers-more-nginx-module) | v0.42 | nginx cannot unset an arbitrary response header |
+| [GeoIP2](https://github.com/leev/ngx_http_geoip2_module) (http **and** stream) | 3.4 | nginx's own GeoIP module reads only the legacy databases MaxMind stopped publishing. **Bring your own `.mmdb`** — see below |
+| [cache-purge](https://github.com/nginx-modules/ngx_cache_purge) | 3.0.4 | invalidating a single `proxy_cache` entry; nginx open source can only expire the whole zone |
+| [fancyindex](https://github.com/aperezdc/ngx-fancyindex) | v0.6.0 | themed directory listings; `autoindex` output is unstyleable |
+| [upload-progress](https://github.com/masterzen/nginx-upload-progress-module) | v0.9.4 | upload progress polling |
+| [ngx_otel_module](https://github.com/nginxinc/nginx-otel) | 0.1.2 | OTLP/gRPC tracing — **from nginx's own package repo**, not built here |
+| [OWASP CRS](https://github.com/coreruleset/coreruleset) | v4.30.0 | shipped with ModSecurity's `modsecurity.conf` and a `main.conf`, **not loaded** |
+
+That is ten modules in thirteen `.so` files: Brotli, Zstandard and GeoIP2 each build two
+(`ngx_http_brotli_filter_module` and `ngx_http_brotli_static_module`,
+`ngx_http_zstd_filter_module` and `ngx_http_zstd_static_module`, `ngx_http_geoip2_module` and
+`ngx_stream_geoip2_module`). `/etc/nginx/modules-enabled/10-modules.conf` loads exactly those
+thirteen. The dynamic modules the official image ships and does not load (njs, image_filter,
+xslt, geoip and acme) are not loaded here either; add a `load_module` line for any you use.
+
+The image also contains `acl` (`setfacl`, `getfacl`), so an entrypoint can give a user access to a directory without changing its owner. The base is `nginx:1.30.7` on Debian trixie; the dynamic modules are compiled against exactly that nginx version.
+
+`ngx_brotli` publishes no releases, so it is pinned to a commit rather than a branch. An
+unpinned dependency in a WAF-bearing image is a change nobody reviewed arriving under a tag
+already published.
+
+## Deliberately absent
+
+These are **already in the official image** — verified against `nginx -V` — and adding them
+would be duplication:
+
+`limit_req` (rate limiting) · `limit_conn` · `real_ip` · HTTP/2 · HTTP/3 · gzip ·
+`gzip_static` · `sub_filter` · `secure_link` · `auth_request` · `map` · `geo` · `slice` ·
+`mp4` · `stream` with `ssl_preread`
+
+**Mail** is complete already: `--with-mail` and `--with-mail_ssl_module` are compiled into the
+official image, which is all eight of `mail_core`, `mail_auth_http`, `mail_proxy`,
+`mail_realip`, `mail_ssl`, `mail_imap`, `mail_pop3` and `mail_smtp`.
+
+**Stream** likewise, apart from GeoIP2's stream variant which this image adds: `stream_core`,
+`stream_access`, `stream_geo`, `stream_geoip`, `stream_js`, `stream_limit_conn`, `stream_log`,
+`stream_map`, `stream_pass`, `stream_proxy`, `stream_realip`, `stream_return`, `stream_set`,
+`stream_split_clients`, `stream_ssl`, `stream_ssl_preread` and `stream_upstream`.
+
+And these cannot be added to any open-source build, being NGINX Plus only — verified against
+nginx.org, each of which documents itself as *"part of our commercial subscription"*:
+
+- **HTTP:** `api`, `auth_jwt`, `f4f`, `hls`, `keyval`, `oidc`, `session_log`, `status`,
+  `upstream_conf`
+- **Stream:** `keyval`, `mqtt_preread`, `mqtt_filter`, `num_map`, `proxy_protocol_vendor`,
+  `upstream_hc`, `zone_sync`
+
+`mp4` itself is open source and in the official image (`--with-http_mp4_module` in `nginx -V`);
+only two of its directives, `mp4_limit_rate` and `mp4_limit_rate_after`, are part of the
+commercial subscription.
+
+Two of those shape what open-source nginx can do and are worth knowing before you plan around
+them: **`stream_zone_sync`** replicates shared zones between instances, so multi-node rate
+limiting needs a different design here; and **`upstream_hc`** is *active* health checking —
+open-source nginx has only the passive `max_fails`/`fail_timeout`.
+
+## GeoIP2 needs a database you supply
+
+The module is built in; **no database ships with it.** MaxMind requires a free account and a
+licence key to download GeoLite2, and redistributing the `.mmdb` here would be neither legal
+nor current.
+
+Without one, `geoip2` variables silently return whatever `default=` you set — which looks like
+the module working. Mount a database and point at it:
+
+```nginx
+geoip2 /etc/maxmind/GeoLite2-Country.mmdb {
+    auto_reload 5m;                    # picks up database updates without a reload
+    $geoip2_country_code default=ZZ source=$remote_addr country iso_code;
+}
+```
+
+`geoip2_proxy` and `geoip2_proxy_recursive` exist for when nginx sits behind a proxy and
+`$remote_addr` is not the client.
+
+## Nothing is enabled by default
+
+This image's modules are loaded and every one of them does nothing until configured. The
+official image's own dynamic modules stay unloaded, as they are there. Until you write a
+directive, this is a drop-in replacement for `nginx:<version>`.
+
+ModSecurity in particular stays off. The Core Rule Set, ModSecurity's `modsecurity.conf` and a
+`main.conf` that loads both ship at `/etc/nginx/modsecurity/`, and nothing includes them — CRS
+in blocking mode has a real false-positive cost against application admin panels, and the
+exclusions for that are site-specific. `main.conf` starts in `DetectionOnly`: read your logs,
+then decide. See the FAQ for how to turn it on.
+
+## Building Locally
+
+```bash
+docker build -t nginx-custom .
+docker run --rm nginx-custom nginx -V
+docker run --rm nginx-custom nginx -t
+```
+
+Overridable at build time: `NGINX_VERSION`, `DEBIAN_RELEASE`, `MODSECURITY_VERSION`,
+`MODSECURITY_NGINX_VERSION`, `HEADERS_MORE_VERSION`, `GEOIP2_VERSION`, `VTS_VERSION`,
+`NGX_BROTLI_COMMIT`, `ZSTD_MODULE_VERSION`, `ZSTD_VERSION`, `CRS_VERSION`,
+`OTEL_MODULE_VERSION`, `FANCYINDEX_VERSION`, `CACHE_PURGE_VERSION`, `UPLOAD_PROGRESS_VERSION`.
+Each module's `*_VERSION` has a matching `*_COMMIT`, and `ZSTD_VERSION` and `CRS_VERSION` a
+matching `ZSTD_SHA256` and `CRS_SHA256`; change them together.
+
+**What the build verifies.** The nginx source tarball must carry a good signature from one of
+the nginx release keys whose fingerprints are written in the Dockerfile. The package signing
+key for `nginx-module-otel` is checked against its three pinned fingerprints before apt uses it.
+Each module is fetched as its pinned commit, and the pinned tag must still point at that
+commit. The zstd and CRS tarballs must match their pinned SHA-256. Any mismatch fails the
+build.
+
+`scripts/check-upstream.sh` compares every pin with the latest upstream release and exits 1
+listing what is behind; `.github/workflows/upstream-check.yml` runs it weekly.
+
+The final stage runs `nginx -t` with every module loaded **and then starts nginx and serves a
+request**, so a module built against a mismatched nginx fails **the build** rather than a
+customer's server at start time.
+
+## Tags
+
+`<nginx-version>` and `latest`, published on push to `main`.
+
+The tag names the **upstream nginx release**, not a build of this repository — so it is
+republished when the Dockerfile changes. A module bump or a CRS update can land under an
+unchanged nginx version. **Pin by digest if you need immutability.**
+
+## Why there is no Lua
+
+Lua and the OpenResty toolkit — `lua-nginx-module` on LuaJIT, plus `ngx_devel_kit`,
+`set-misc`, `echo`, `redis2`, `srcache` and `memc` — were built here and **removed on
+2026-08-31**. They worked; they were dropped because nothing needed them.
+
+The reasoning is worth recording, because "it builds cleanly" is a weak argument for shipping
+something. This image's job is to be a **gateway**: terminate TLS, route, filter, compress,
+report. `srcache`, `redis2` and `memc` cache responses into Redis or memcached, which is
+*application*-tier work that belongs to whatever server sits behind the gateway. `echo` and
+`set-misc` are conveniences for writing that kind of logic in configuration. And Lua is the
+general answer to "what if we need to do something nginx cannot express" — a real capability,
+but one that pulls a second language runtime, a version-pairing constraint tight enough to
+break a build, and roughly 10MB of LuaJIT into every pull, in exchange for a need nobody has
+articulated yet.
+
+If that need arrives, the modules go back: each is a version pin, a clone and a
+`--add-dynamic-module` line. Carrying them *before* it arrives is how an image accumulates
+surface that nobody can later justify removing.
+
+## Why the OTel module is installed, not compiled
+
+Every other module here is built from source because upstream nginx does not package it.
+`ngx_otel_module` is the exception: nginx publishes `nginx-module-otel` in **the same
+repository the official image installs nginx from**, built against that exact binary. The
+compatibility question `--with-compat` exists to answer does not arise for it at all.
+
+Compiling it instead would pull gRPC, protobuf and opentelemetry-cpp in through CMake — a long
+build and a large dependency surface, for a worse binary-compatibility story than the artifact
+upstream already ships. The version is pinned as `<nginx>+<module>-1~<release>`, so a
+mismatched pair is refused by apt rather than loaded.
+
+## Debian, not Alpine
+
+ModSecurity's dependency set — yajl, lmdb, libxml2, curl — is better served by glibc, and
+musl builds of it are a known source of subtle breakage.
+
+## Why ModSecurity and not ngx_waf
+
+`ngx_waf` was considered. It is ModSecurity-compatible and adds things this image otherwise
+lacks — rate-based automatic IP banning, verified-crawler allowlisting for Google/Bing/Baidu/
+Yandex, and hCaptcha/reCAPTCHA support — which together cover what a Caddy build gets from
+its rate-limit and defender modules.
+
+It was declined on maintenance. Its last upstream commit is January 2025 and the packaged
+release most distributions carry is v10.1.2 from July 2022. **For a firewall specifically,
+that is disqualifying in a way it would not be for a compression module** — and it pulls in
+libsodium, libcurl, cJSON, uthash and libinjection, widening the attack surface of the thing
+meant to reduce it.
+
+ModSecurity 3 is actively maintained and OWASP-governed, which is the one property a WAF
+cannot trade away. Its missing features have better-targeted answers: `limit_req` is built
+into nginx for rate limiting, and crawler verification or CAPTCHA belong in a module chosen
+for that job.
+
+## ❓ FAQ
+
+**Q: How do I turn the WAF on?**
+A: The module is already loaded. Add two lines to the `http`, `server` or `location` block
+you want protected:
+```nginx
+modsecurity on;
+modsecurity_rules_file /etc/nginx/modsecurity/main.conf;
+```
+`main.conf` includes ModSecurity's `modsecurity.conf` (its `modsecurity.conf-recommended`,
+copied unchanged from the v3.0.17 source the library was built from), then `crs-setup.conf`,
+then the CRS rules, with `SecRuleEngine DetectionOnly`: matches are written to the audit log,
+and nothing is blocked. `modsecurity.conf` keeps ModSecurity's rules `200002` and `200003`,
+which reject request bodies that fail to parse or break strict multipart parsing; CRS cannot
+inspect those bodies otherwise. The audit log is `/var/log/modsec_audit.log` inside the
+container, as `modsecurity.conf` sets it; it records requests that matched a rule or got a 5xx
+or a 4xx other than 404.
+
+Read your logs, and only then switch to blocking — CRS has a real false-positive cost against
+application admin panels, WordPress's `/wp-admin` in particular. To block, add one more line
+**before** `modsecurity_rules_file`, in the same block:
+```nginx
+modsecurity on;
+modsecurity_rules 'SecRuleEngine On';
+modsecurity_rules_file /etc/nginx/modsecurity/main.conf;
+```
+Before, not after: when one block sets `SecRuleEngine` twice, the connector keeps the first
+value it loads, so a line after `main.conf` leaves it in `DetectionOnly`.
+To change anything else, mount your own `main.conf` (or `crs-setup.conf`) over the shipped one.
+
+**Q: I replaced `/etc/nginx/nginx.conf` and all the modules vanished. Why?**
+A: `load_module` is only valid in nginx's main context, so it cannot live in `conf.d/`. The
+image adds one include line to `nginx.conf`; if you replace that file, keep it:
+```nginx
+include /etc/nginx/modules-enabled/*.conf;
+```
+Mounting into `conf.d/` instead needs no such care.
+
+**Q: GeoIP2 returns my `default=` value for every request.**
+A: No database ships with the image — MaxMind requires an account and licence key, and
+redistributing the `.mmdb` here would be neither legal nor current. Mount one and point
+`geoip2` at it. See the GeoIP2 section above.
+
+**Q: Why is nothing enabled by default?**
+A: This image's modules are loaded and every one does nothing until configured, and the official
+image's own dynamic modules stay unloaded, so this is a drop-in replacement for
+`nginx:<version>` until you write a directive. Enabling a WAF, or choosing
+detection versus blocking, belongs to whoever runs the server.
+
+**Q: Can I use this with PHP?**
+A: Yes — pair it with [morsalin1342/php](https://hub.docker.com/r/morsalin1342/php) over
+FastCGI. For a single-container Caddy+PHP app server instead, use
+[morsalin1342/frankenphp](https://hub.docker.com/r/morsalin1342/frankenphp).
+
+**Q: How do I add a module that isn't here?**
+A: Fork the repo, pin it to a tag or commit, and add an `--add-dynamic-module` line to the
+modules stage. See CONTRIBUTING.md — and check the "Deliberately absent" list first, because
+nginx may already do it.
+
+## Licence
+
+The files in this repository are MIT ([LICENSE](LICENSE)). That licence covers the build files,
+not the software in the image, which keeps its own licences. The main components:
+
+| Component | Licence |
+|---|---|
+| nginx | BSD-2-Clause |
+| ModSecurity 3 and ModSecurity-nginx | Apache-2.0 |
+| libinjection, built into libmodsecurity | BSD-3-Clause |
+| Mbed TLS, built into libmodsecurity | Apache-2.0 or GPL-2.0-or-later, at your choice |
+| OWASP Core Rule Set | Apache-2.0 |
+| ngx_otel_module (nginx-otel) | Apache-2.0 |
+| ngx_brotli | BSD-2-Clause |
+| Brotli library, built into ngx_brotli | MIT |
+| zstd-nginx-module | BSD-2-Clause |
+| Zstandard library, linked into zstd-nginx-module | BSD-3-Clause or GPL-2.0, at your choice |
+| headers-more | BSD-2-Clause |
+| GeoIP2 (ngx_http_geoip2_module) | BSD-2-Clause |
+| VTS (nginx-module-vts) | BSD-2-Clause |
+| cache-purge (ngx_cache_purge) | BSD-2-Clause |
+| fancyindex (ngx-fancyindex) | BSD-2-Clause |
+| upload-progress (nginx-upload-progress-module) | BSD-2-Clause |
+| Debian packages from the base image and `apt-get` | their own licences |
+
+Each build also writes an SPDX SBOM, kept as an artifact of its workflow run, which lists each
+package with the licence it declares.
+
+---
+
+## Related Images & Tools
+
+<!-- BEGIN GENERATED: related (from catalog.yaml in the morsalin1342/docker-images repository; do not edit by hand) -->
+Every image is published to Docker Hub as `morsalin1342/<image>` and to GitHub Container Registry as `ghcr.io/morsalin1342/<image>`, from the same build.
+
+| Repository | Images | Description |
+|---|---|---|
+| [caddy-docker](https://github.com/morsalin1342/caddy-docker) | `morsalin1342/caddy` · `ghcr.io/morsalin1342/caddy` | Standalone Caddy with WAF, rate limiting & caching |
+| [frankenphp-docker](https://github.com/morsalin1342/frankenphp-docker) | `morsalin1342/frankenphp` · `ghcr.io/morsalin1342/frankenphp` | Caddy + PHP app server in one container |
+| [php-docker](https://github.com/morsalin1342/php-docker) | `morsalin1342/php` · `ghcr.io/morsalin1342/php` | Traditional PHP-FPM & CLI images |
+| [apache-docker](https://github.com/morsalin1342/apache-docker) | `morsalin1342/apache` · `ghcr.io/morsalin1342/apache` | Apache httpd as a static server or php-fpm application server, no PHP inside |
+| [adminer-docker](https://github.com/morsalin1342/adminer-docker) | `morsalin1342/adminer` · `ghcr.io/morsalin1342/adminer` | Adminer database tool: the official image plus Alpine security updates |
+<!-- END GENERATED: related -->
+
+---
+
+## Feedback and Issues
+
+If you have suggestions, find a bug, or want to request a new module, please [open an issue](https://github.com/morsalin1342/nginx-docker/issues) on the GitHub repository.
+
+---
+
+⭐ **If this project helps you, consider giving it a star!**
